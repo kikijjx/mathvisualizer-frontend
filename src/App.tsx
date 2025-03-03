@@ -1,13 +1,14 @@
 import React from 'react';
 import { Tabs, Card } from 'antd';
 import { MathJaxContext } from 'better-react-mathjax';
-import TrapezoidalIntegration from './TrapezoidalIntegration';
-import LeftRectanglesIntegration from './LeftRectanglesIntegration';
-import RightRectanglesIntegration from './RightRectanglesIntegration';
-import MidpointRectanglesIntegration from './MidpointRectanglesIntegration';
-import SimpsonIntegration from './SimpsonIntegration';
-import LagrangeInterpolation from './LagrangeInterpolation';
-import AitkenInterpolation from './AitkenInterpolation';
+import TrapezoidalIntegration from './Integration/TrapezoidalIntegration';
+import LeftRectanglesIntegration from './Integration/LeftRectanglesIntegration';
+import RightRectanglesIntegration from './Integration/RightRectanglesIntegration';
+import MidpointRectanglesIntegration from './Integration/MidpointRectanglesIntegration';
+import SimpsonIntegration from './Integration/SimpsonIntegration';
+import LagrangeInterpolation from './Interpolation/LagrangeInterpolation';
+import AitkenInterpolation from './Interpolation/AitkenInterpolation';
+import EulerMethod from './Diffurs/EulerMethod';
 
 import Tasks from './Tasks';
 import './App.css';
@@ -49,6 +50,11 @@ const App: React.FC = () => {
       label: 'Интерполяция Эйткена',
       children: <AitkenInterpolation />,
     },
+    {
+      key: 'euler',
+      label: 'Эйлер',
+      children: <EulerMethod/>,
+    }
   ];
 
   const mainItems = [
