@@ -1,19 +1,47 @@
-import React from 'react';
-import { Tabs, Card } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Tabs } from 'antd';
 import { MathJaxContext } from 'better-react-mathjax';
 import TrapezoidalIntegration from './Integration/TrapezoidalIntegration';
 import LeftRectanglesIntegration from './Integration/LeftRectanglesIntegration';
 import RightRectanglesIntegration from './Integration/RightRectanglesIntegration';
 import MidpointRectanglesIntegration from './Integration/MidpointRectanglesIntegration';
 import SimpsonIntegration from './Integration/SimpsonIntegration';
-import LagrangeInterpolation from './Interpolation/LagrangeInterpolation';
-import AitkenInterpolation from './Interpolation/AitkenInterpolation';
-import EulerMethod from './Diffurs/EulerMethod';
-
-import Tasks from './Tasks';
+import Tasks from './Tasks/Tasks';
+import AdminPanel from './AdminPanel';
+import { getThemes, getTasks, getMethods, Theme, Task, Method } from './api';
 import './App.css';
 
 const App: React.FC = () => {
+  const [themes, setThemes] = useState<Theme[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [methods, setMethods] = useState<Method[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const themesData = await getThemes();
+        const tasksData = await getTasks();
+        setThemes(themesData);
+        setTasks(tasksData);
+        // Методы зависят от выбранной темы, поэтому их загрузим в Tasks
+      } catch (error) {
+        console.error('Ошибка при загрузке данных:', error);
+      }
+    };
+    fetchData();
+  }, []);
+
+  const refreshData = async () => {
+    try {
+      const themesData = await getThemes();
+      const tasksData = await getTasks();
+      setThemes(themesData);
+      setTasks(tasksData);
+    } catch (error) {
+      console.error('Ошибка при обновлении данных:', error);
+    }
+  };
+
   const methodsItems = [
     {
       key: 'trapezoidal',
@@ -40,33 +68,23 @@ const App: React.FC = () => {
       label: 'Метод Симпсона',
       children: <SimpsonIntegration />,
     },
-    {
-      key: 'lagrange',
-      label: 'Интерполяция Лагранжа',
-      children: <LagrangeInterpolation />,
-    },
-    {
-      key: 'aitken',
-      label: 'Интерполяция Эйткена',
-      children: <AitkenInterpolation />,
-    },
-    {
-      key: 'euler',
-      label: 'Эйлер',
-      children: <EulerMethod/>,
-    }
   ];
 
   const mainItems = [
     {
       key: 'tasks',
       label: 'Задачи',
-      children: <Tasks />,
+      children: <Tasks themes={themes} tasks={tasks} methods={methods} setThemes={setThemes} setTasks={setTasks} setMethods={setMethods} />,
     },
     {
       key: 'methods',
       label: 'Методы',
-      children: <Tabs tabPosition="left" items={methodsItems} />,
+      children:  <Tabs tabPosition="left" items={methodsItems} /> ,
+    },
+    {
+      key: 'admin',
+      label: 'Админ-панель',
+      children: <AdminPanel onDataChange={refreshData} />,
     },
   ];
 

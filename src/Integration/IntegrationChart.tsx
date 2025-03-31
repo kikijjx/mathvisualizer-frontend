@@ -46,7 +46,7 @@ const IntegrationChart: React.FC<IntegrationChartProps> = ({
 
   // Формируем данные для сегментов (соединяем вершины с осью y=0)
   const segmentDataset = {
-    label: 'Сегменты',
+    label: 'Аппроксимация',
     data: segmentData.flatMap((point, index, array) => {
       // Если это не последняя точка, соединяем текущую вершину с осью y=0 и следующей вершиной
       if (index < array.length - 1) {

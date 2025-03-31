@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Card, Button, Typography } from 'antd';
 import IntegrationInputs from './IntegrationInputs';
 import IntegrationChart from './IntegrationChart';
-import IntegrationTable from './IntegrationTable'; // Импортируем новый компонент
+import IntegrationTable from './IntegrationTable';
 import { replaceMathFunctions } from '../mathUtils';
 import { MathJax } from 'better-react-mathjax';
 import {
@@ -29,6 +29,9 @@ const TrapezoidalIntegration: React.FC = () => {
   const [exactIntegral, setExactIntegral] = useState<number | null>(null);
 
   const integrate = () => {
+    // Начало измерения времени
+    console.time('Integration Time');
+
     const processedLatex = replaceMathFunctions(latex);
     const func = (x: number) => eval(processedLatex.replace(/x/g, `(${x})`));
     const step = (b - a) / n;
@@ -80,8 +83,15 @@ const TrapezoidalIntegration: React.FC = () => {
     setTableData(newTableData);
 
     // Результат для выбранного метода (трапеций)
-    setResult(trapezoidal(func, a, b, n));
+    const trapezoidalResult = trapezoidal(func, a, b, n);
+    setResult(trapezoidalResult);
 
+    // Вывод данных в консоль текстом
+    console.log(`Число разбиений (n): ${n}`);
+    console.log(`Найденное значение интеграла: ${trapezoidalResult}`);
+    
+    // Конец измерения времени (время автоматически выводится в консоль)
+    console.timeEnd('Integration Time');
   };
 
   return (
@@ -156,7 +166,6 @@ const TrapezoidalIntegration: React.FC = () => {
 
       {/* Таблица с результатами */}
       <IntegrationTable
-      
         data={tableData}
         highlightedMethod="Трапеций"
       />

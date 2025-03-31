@@ -29,6 +29,8 @@ const MidpointRectanglesIntegration: React.FC = () => {
   const [exactIntegral, setExactIntegral] = useState<number | null>(null);
 
   const integrate = () => {
+    console.time('Integration Time');
+
     const processedLatex = replaceMathFunctions(latex);
     const func = (x: number) => eval(processedLatex.replace(/x/g, `(${x})`));
     const step = (b - a) / n;
@@ -80,7 +82,15 @@ const MidpointRectanglesIntegration: React.FC = () => {
     setTableData(newTableData);
 
     // Результат для выбранного метода (средних прямоугольников)
-    setResult(midpointRectangles(func, a, b, n));
+        const trapezoidalResult = midpointRectangles(func, a, b, n);
+        setResult(trapezoidalResult);
+    
+        // Вывод данных в консоль текстом
+        console.log(`Число разбиений (n): ${n}`);
+        console.log(`Найденное значение интеграла: ${trapezoidalResult}`);
+        
+        // Конец измерения времени (время автоматически выводится в консоль)
+        console.timeEnd('Integration Time');
   };
 
   return (

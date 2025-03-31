@@ -50,6 +50,12 @@ const IntegrationInputs: React.FC<IntegrationInputsProps> = ({
         onChange={(e) => setB(Number(e.target.value))}
         type="number"
       />
+      <Input
+        addonBefore="n ="
+        value={n}
+        onChange={(e) => setN(Number(e.target.value))}
+        type="number"
+      />
       <Slider
         min={1}
         max={100}

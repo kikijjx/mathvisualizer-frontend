@@ -18,6 +18,7 @@ import {
 const { Paragraph } = Typography;
 
 const RightRectanglesIntegration: React.FC = () => {
+  console.time('Integration Time');
   const [latex, setLatex] = useState<string>('sin(x)');
   const [a, setA] = useState<number>(0);
   const [b, setB] = useState<number>(10);
@@ -80,7 +81,15 @@ const RightRectanglesIntegration: React.FC = () => {
     setTableData(newTableData);
 
     // Результат для выбранного метода (правых прямоугольников)
-    setResult(rightRectangles(func, a, b, n));
+        const trapezoidalResult = rightRectangles(func, a, b, n);
+        setResult(trapezoidalResult);
+    
+        // Вывод данных в консоль текстом
+        console.log(`Число разбиений (n): ${n}`);
+        console.log(`Найденное значение интеграла: ${trapezoidalResult}`);
+        
+        // Конец измерения времени (время автоматически выводится в консоль)
+        console.timeEnd('Integration Time');
   };
 
   return (

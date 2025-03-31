@@ -1,5 +1,5 @@
-import React from 'react';
-import { Line } from 'react-chartjs-2';
+import React from "react";
+import { Line } from "react-chartjs-2";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -9,7 +9,7 @@ import {
   Title,
   Tooltip,
   Legend,
-} from 'chart.js';
+} from "chart.js";
 
 ChartJS.register(
   CategoryScale,
@@ -27,38 +27,32 @@ interface DiffurChartProps {
 }
 
 const DiffurChart: React.FC<DiffurChartProps> = ({ t, y }) => {
-  const chartData = {
+  const data = {
     labels: t,
     datasets: [
       {
-        label: 'y(t)',
+        label: "y(t)",
         data: y,
-        borderColor: 'rgba(75, 192, 192, 1)',
+        borderColor: "rgba(75, 192, 192, 1)",
+        backgroundColor: "rgba(75, 192, 192, 0.2)",
         fill: false,
+        tension: 0.1,
       },
     ],
   };
 
-  const chartOptions = {
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
     scales: {
-      x: {
-        title: {
-          display: true,
-          text: 'Time (t)',
-        },
-      },
-      y: {
-        title: {
-          display: true,
-          text: 'y(t)',
-        },
-      },
+      x: { title: { display: true, text: "Время (t)" } },
+      y: { title: { display: true, text: "y(t)" } },
     },
   };
 
   return (
-    <div style={{ marginTop: '20px', height: '400px' }}>
-      <Line data={chartData} options={chartOptions} />
+    <div style={{ height: "400px", marginTop: "20px" }}>
+      <Line data={data} options={options} />
     </div>
   );
 };
