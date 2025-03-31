@@ -41,16 +41,15 @@ export const ServerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     // Первоначальная проверка
     checkServer();
 
-    // Периодическая проверка только если сервер недоступен
-    let interval: NodeJS.Timeout | null = null;
-    if (isServerAvailable === false) {
-      interval = setInterval(checkServer, 10000); // Проверка каждые 10 секунд
-    }
+    // Периодическая проверка
+    const interval = setInterval(() => {
+      if (isServerAvailable === false) {
+        checkServer();
+      }
+    }, 10000); // Проверка каждые 10 секунд, только если сервер недоступен
 
-    return () => {
-      if (interval) clearInterval(interval); // Очистка интервала при размонтировании или изменении состояния
-    };
-  }, [isServerAvailable]); // Зависимость от isServerAvailable
+    return () => clearInterval(interval); // Очистка интервала при размонтировании
+  }, []); // Убрана зависимость от isServerAvailable
 
   return (
     <ServerContext.Provider value={{ isServerAvailable, setServerAvailable }}>

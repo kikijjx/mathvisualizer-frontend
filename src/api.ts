@@ -53,6 +53,28 @@ export interface TaskParam {
   param_value: string;
 }
 
+export interface ReportTemplate {
+  id: number;
+  task_id: number;
+  name: string;
+  content: ReportContent[];
+}
+
+export interface ReportContent {
+  type: 'text' | 'table' | 'image';
+  value: string | TableData | ImageData;
+}
+
+export interface TableData {
+  columns: string[];
+  rows: string[][];
+}
+
+export interface ImageData {
+  url: string;
+  alt?: string;
+}
+
 // Вспомогательная функция для обработки запросов с учетом состояния сервера
 const apiRequest = async <T>(
   request: () => Promise<T>,
@@ -65,8 +87,19 @@ const apiRequest = async <T>(
   } catch (error) {
     const axiosError = error as AxiosError;
     console.error('API request error:', axiosError.message);
-    setServerAvailable(false);
-    throw error; // Передаем ошибку дальше для обработки в компонентах
+
+    // Проверяем, является ли ошибка 404 или другой клиентской ошибкой (400-499)
+    if (axiosError.response?.status === 404) {
+      // Для 404 не меняем состояние сервера, просто возвращаем пустой результат или бросаем ошибку
+      throw error; // Пусть вызывающий код решает, что делать
+    } else if (axiosError.response?.status && axiosError.response.status >= 400 && axiosError.response.status < 500) {
+      // Другие клиентские ошибки (400-499, кроме 404) тоже не считаем проблемой сервера
+      throw error;
+    } else {
+      // Серверные ошибки (500+) или проблемы с сетью
+      setServerAvailable(false);
+      throw error;
+    }
   }
 };
 
@@ -333,6 +366,48 @@ export const deleteTaskParam = async (
 ): Promise<void> => {
   return apiRequest(
     () => axios.delete(`${API_URL}/task-params/${paramId}`).then(() => undefined),
+    setServerAvailable
+  );
+};
+
+// Шаблоны отчётов
+export const getReportTemplates = async (
+  taskId: number,
+  setServerAvailable: (available: boolean) => void
+): Promise<ReportTemplate[]> => {
+  return apiRequest(
+    () => axios.get(`${API_URL}/report-templates/${taskId}`).then((response) => response.data),
+    setServerAvailable
+  );
+};
+
+export const createReportTemplate = async (
+  template: Omit<ReportTemplate, 'id'>,
+  setServerAvailable: (available: boolean) => void
+): Promise<ReportTemplate> => {
+  return apiRequest(
+    () => axios.post(`${API_URL}/report-templates/`, template).then((response) => response.data),
+    setServerAvailable
+  );
+};
+
+export const updateReportTemplate = async (
+  templateId: number,
+  template: Omit<ReportTemplate, 'id'>,
+  setServerAvailable: (available: boolean) => void
+): Promise<ReportTemplate> => {
+  return apiRequest(
+    () => axios.put(`${API_URL}/report-templates/${templateId}`, template).then((response) => response.data),
+    setServerAvailable
+  );
+};
+
+export const deleteReportTemplate = async (
+  templateId: number,
+  setServerAvailable: (available: boolean) => void
+): Promise<void> => {
+  return apiRequest(
+    () => axios.delete(`${API_URL}/report-templates/${templateId}`).then(() => undefined),
     setServerAvailable
   );
 };

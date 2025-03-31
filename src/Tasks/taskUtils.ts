@@ -29,7 +29,27 @@ export interface ThemeWithParams extends Theme {
 export interface TaskWithParams extends Task {
   params: Record<string, any>;
 }
+export interface ReportTemplate {
+  id: number;
+  task_id: number; // Связь с задачей
+  name: string; // Название шаблона
+  content: ReportContent[]; // Содержимое шаблона
+}
 
+export interface ReportContent {
+  type: 'text' | 'table' | 'image'; // Тип элемента
+  value: string | TableData | ImageData; // Значение в зависимости от типа
+}
+
+export interface TableData {
+  columns: string[];
+  rows: string[][];
+}
+
+export interface ImageData {
+  url: string; // URL изображения
+  alt?: string; // Альтернативный текст
+}
 export const fetchInitialData = async (
   setThemes: (themes: ThemeWithParams[]) => void,
   setTasks: (tasks: TaskWithParams[]) => void,

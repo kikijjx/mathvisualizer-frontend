@@ -2,7 +2,9 @@ import React from 'react';
 import { Button, List, Space, Typography, Collapse } from 'antd';
 import { MathJax } from 'better-react-mathjax';
 import { EditOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
-import { TaskWithParams, MethodWithParams, ThemeWithParams } from './taskUtils';
+import { TaskWithParams, MethodWithParams, ThemeWithParams, ReportTemplate } from './taskUtils';
+import { Document, Packer, Paragraph, Table as DocxTable, TableRow, TableCell, TextRun } from 'docx';
+import { saveAs } from 'file-saver';
 
 const { Text, Title } = Typography;
 const { Panel } = Collapse;
@@ -17,6 +19,10 @@ interface TaskListProps {
   onGenerateVariants: (task: TaskWithParams) => void;
   onAddSubtask: (taskId: number) => void;
   onDeleteSubtask: (subtaskId: number) => void;
+  reportTemplates: Record<number, ReportTemplate[]>;
+  onAddReportTemplate: (taskId: number) => void;
+  onEditReportTemplate: (template: ReportTemplate) => void;
+  onDeleteReportTemplate: (templateId: number) => void;
 }
 
 const TaskList: React.FC<TaskListProps> = ({
@@ -29,6 +35,10 @@ const TaskList: React.FC<TaskListProps> = ({
   onGenerateVariants,
   onAddSubtask,
   onDeleteSubtask,
+  reportTemplates,
+  onAddReportTemplate,
+  onEditReportTemplate,
+  onDeleteReportTemplate,
 }) => {
   const renderTaskParams = (params: Record<string, any>) => {
     const sortedParams = Object.entries(params).sort(([keyA], [keyB]) => {
@@ -64,6 +74,52 @@ const TaskList: React.FC<TaskListProps> = ({
     });
 
     return sortedParams.map(([key, value]) => `${key} = ${value}`).join(', ');
+  };
+
+  const downloadTemplateAsWord = (template: ReportTemplate) => {
+    const doc = new Document({
+      sections: [
+        {
+          children: template.content.map((item) => {
+            switch (item.type) {
+              case 'text':
+                return new Paragraph({
+                  children: [new TextRun(item.value as string)],
+                });
+              case 'table':
+                const tableData = item.value as { columns: string[]; rows: string[][] };
+                return new DocxTable({
+                  rows: [
+                    new TableRow({
+                      children: tableData.columns.map(
+                        (col) => new TableCell({ children: [new Paragraph(col)] })
+                      ),
+                    }),
+                    ...tableData.rows.map(
+                      (row) =>
+                        new TableRow({
+                          children: row.map((cell) => new TableCell({ children: [new Paragraph(cell)] })),
+                        })
+                    ),
+                  ],
+                });
+              case 'image':
+                // Для изображений нужно добавить поддержку через URL или заглушку
+                const imageData = item.value as { url: string; alt?: string };
+                return new Paragraph({
+                  children: [new TextRun(`Изображение: ${imageData.url} (${imageData.alt || 'без описания'})`)],
+                });
+              default:
+                return new Paragraph('');
+            }
+          }),
+        },
+      ],
+    });
+
+    Packer.toBlob(doc).then((blob) => {
+      saveAs(blob, `Шаблон_отчёта_${template.id}.docx`);
+    });
   };
 
   const groupedTasks = themes.map((theme) => ({
@@ -120,6 +176,48 @@ const TaskList: React.FC<TaskListProps> = ({
                         }}
                       />
                     )}
+                    {reportTemplates[task.id]?.length > 0 && (
+                      <List
+                        size="small"
+                        dataSource={reportTemplates[task.id]}
+                        renderItem={(template) => (
+                          <List.Item
+                            actions={
+                              isEditable
+                                ? [
+                                    <Button
+                                      type="link"
+                                      size="small"
+                                      icon={<EditOutlined />}
+                                      onClick={() => onEditReportTemplate(template)}
+                                    >
+                                      Редактировать
+                                    </Button>,
+                                    <Button
+                                      type="link"
+                                      size="small"
+                                      danger
+                                      icon={<DeleteOutlined />}
+                                      onClick={() => onDeleteReportTemplate(template.id)}
+                                    >
+                                      Удалить
+                                    </Button>,
+                                  ]
+                                : []
+                            }
+                          >
+                            <Text>
+                              <a
+                                onClick={() => downloadTemplateAsWord(template)}
+                                style={{ color: '#1890ff', cursor: 'pointer' }}
+                              >
+                                Шаблон отчёта
+                              </a>
+                            </Text>
+                          </List.Item>
+                        )}
+                      />
+                    )}
                   </Space>
                   {isEditable && (
                     <Space
@@ -163,6 +261,14 @@ const TaskList: React.FC<TaskListProps> = ({
                         onClick={() => onAddSubtask(task.id)}
                       >
                         Подзадача
+                      </Button>
+                      <Button
+                        type="dashed"
+                        size="small"
+                        icon={<PlusOutlined />}
+                        onClick={() => onAddReportTemplate(task.id)}
+                      >
+                        Шаблон отчёта
                       </Button>
                     </Space>
                   )}

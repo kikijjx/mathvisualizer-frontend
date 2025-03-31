@@ -21,7 +21,7 @@ const SimpsonIntegration: React.FC = () => {
   const [latex, setLatex] = useState<string>('sin(x)');
   const [a, setA] = useState<number>(0);
   const [b, setB] = useState<number>(10);
-  const [n, setN] = useState<number>(12); // Start with an even number
+  const [n, setN] = useState<number>(12);
   const [result, setResult] = useState<number | null>(null);
   const [functionData, setFunctionData] = useState<{ x: number; y: number }[]>([]);
   const [parabolaData, setParabolaData] = useState<{ x: number; y: number }[]>([]);
@@ -35,11 +35,9 @@ const SimpsonIntegration: React.FC = () => {
     const func = (x: number) => eval(processedLatex.replace(/x/g, `(${x})`));
     const step = (b - a) / n;
 
-    // Exact integral value
     const exact = calculateExactIntegral(a, b);
     setExactIntegral(exact);
 
-    // Generate function data for the exact graph
     const numPoints = 500;
     const newFunctionData = [];
     for (let i = 0; i <= numPoints; i++) {
@@ -49,19 +47,31 @@ const SimpsonIntegration: React.FC = () => {
     }
     setFunctionData(newFunctionData);
 
-    // Generate data for parabolic segments (Simpson's rule uses pairs of intervals)
-    const newParabolaData = [];
+    // Генерация данных для парабол с большим количеством точек
+    const newParabolaData: { x: number; y: number }[] = [];
+    const pointsPerParabola = 20; // Количество точек для каждой параболы
     for (let i = 0; i < n; i += 2) {
       const x0 = a + i * step;
       const x1 = a + (i + 1) * step;
       const x2 = a + (i + 2) * step;
-      newParabolaData.push({ x: x0, y: func(x0) });
-      newParabolaData.push({ x: x1, y: func(x1) });
-      newParabolaData.push({ x: x2, y: func(x2) });
+      const y0 = func(x0);
+      const y1 = func(x1);
+      const y2 = func(x2);
+
+      // Вычисляем коэффициенты параболы ax² + bx + c через три точки
+      const a_parabola = (y2 - 2 * y1 + y0) / (2 * step * step);
+      const b_parabola = (y1 - y0 - a_parabola * (x1 * x1 - x0 * x0)) / (x1 - x0);
+      const c_parabola = y0 - a_parabola * x0 * x0 - b_parabola * x0;
+
+      // Генерируем точки для параболы
+      for (let j = 0; j <= pointsPerParabola; j++) {
+        const x = x0 + (j / pointsPerParabola) * 2 * step; // От x0 до x2
+        const y = a_parabola * x * x + b_parabola * x + c_parabola;
+        newParabolaData.push({ x, y });
+      }
     }
     setParabolaData(newParabolaData);
 
-    // Calculate results for all methods
     const methods = [
       { name: 'Левых прямоугольников', func: leftRectangles },
       { name: 'Правых прямоугольников', func: rightRectangles },
@@ -75,7 +85,7 @@ const SimpsonIntegration: React.FC = () => {
       try {
         approx = method.func(func, a, b, n);
       } catch (e) {
-        approx = NaN; // Handle the case where Simpson's rule fails due to odd n
+        approx = NaN;
       }
       const error = Math.abs(exact - approx);
       const theoreticalError = calculateTheoreticalError(method.name, func, a, b, n);
@@ -84,7 +94,6 @@ const SimpsonIntegration: React.FC = () => {
 
     setTableData(newTableData);
 
-    // Result for Simpson's method
     const simpsonResult = simpson(func, a, b, n);
     setResult(simpsonResult);
 
@@ -95,7 +104,6 @@ const SimpsonIntegration: React.FC = () => {
 
   return (
     <Card title="Метод Симпсона" style={{ width: '100%', maxWidth: '800px', margin: '0 auto' }}>
-      {/* Theory */}
       <Typography style={{ textAlign: 'left', padding: '0 20px' }}>
         <Paragraph>
           Пусть требуется вычислить определённый интеграл:
@@ -127,7 +135,6 @@ const SimpsonIntegration: React.FC = () => {
         </Paragraph>
       </Typography>
 
-      {/* Inputs */}
       <IntegrationInputs
         latex={latex}
         setLatex={setLatex}
@@ -139,12 +146,10 @@ const SimpsonIntegration: React.FC = () => {
         setN={setN}
       />
 
-      {/* Integrate Button */}
       <Button onClick={integrate} style={{ marginTop: '10px' }}>
         Интегрировать
       </Button>
 
-      {/* Chart and Result */}
       <IntegrationChart
         functionData={functionData}
         segmentData={parabolaData}
@@ -152,7 +157,6 @@ const SimpsonIntegration: React.FC = () => {
         method="Симпсона"
       />
 
-      {/* Exact Integral */}
       {exactIntegral !== null && (
         <Typography style={{ marginTop: '20px' }}>
           <Paragraph>
@@ -161,7 +165,6 @@ const SimpsonIntegration: React.FC = () => {
         </Typography>
       )}
 
-      {/* Table */}
       <IntegrationTable
         data={tableData}
         highlightedMethod="Симпсона"

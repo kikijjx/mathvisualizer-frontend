@@ -1,12 +1,32 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Space, Form } from 'antd';
+import { Button, Space, Form, message } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
-import { getMethods, deleteTask as apiDeleteTask, deleteSubtask as apiDeleteSubtask, getThemeParams } from '../api';
-import { fetchInitialData, handleTaskCreation, handleTaskEdit, handleSubtaskCreation, MethodWithParams, ThemeWithParams, TaskWithParams } from './taskUtils';
+import {
+  getMethods,
+  deleteTask as apiDeleteTask,
+  deleteSubtask as apiDeleteSubtask,
+  getThemeParams,
+  getReportTemplates,
+  createReportTemplate,
+  updateReportTemplate,
+  deleteReportTemplate,
+} from '../api';
+import {
+  fetchInitialData,
+  handleTaskCreation,
+  handleTaskEdit,
+  handleSubtaskCreation,
+  MethodWithParams,
+  ThemeWithParams,
+  TaskWithParams,
+  ReportTemplate,
+  ReportContent,
+} from './taskUtils';
 import TaskList from './TaskList';
 import TaskModal from './TaskModal';
 import SubtaskModal from './SubtaskModal';
 import VariantModal from './VariantModal';
+import ReportTemplateEditor from './ReportTemplateEditor';
 import { useServer } from '../ServerContext';
 
 interface ParamSettings {
@@ -21,6 +41,7 @@ const Tasks: React.FC = () => {
   const [isSubtaskModalOpen, setIsSubtaskModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isVariantModalOpen, setIsVariantModalOpen] = useState(false);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [themes, setThemes] = useState<ThemeWithParams[]>([]);
   const [methods, setMethods] = useState<MethodWithParams[]>([]);
@@ -33,17 +54,46 @@ const Tasks: React.FC = () => {
   const [selectedParams, setSelectedParams] = useState<Record<string, boolean>>({});
   const [paramSettings, setParamSettings] = useState<Record<string, ParamSettings>>({});
   const [themeParams, setThemeParams] = useState<{ name: string; type: string; id: number }[]>([]);
+  const [reportTemplates, setReportTemplates] = useState<Record<number, ReportTemplate[]>>({});
+  const [editingTemplate, setEditingTemplate] = useState<ReportTemplate | null>(null);
   const [form] = Form.useForm();
+  const [isInitialDataLoaded, setIsInitialDataLoaded] = useState(false);
 
   const isEditable = true;
 
+  // Загрузка начальных данных (только один раз при изменении isServerAvailable)
   useEffect(() => {
-    if (isServerAvailable) {
-      fetchInitialData(setThemes, setTasks, setMethods, selectedThemeId, setServerAvailable);
+    if (isServerAvailable && !isInitialDataLoaded) {
+      fetchInitialData(setThemes, setTasks, setMethods, selectedThemeId, setServerAvailable).then(() => {
+        setIsInitialDataLoaded(true);
+      });
     }
-  }, [isServerAvailable]);
+  }, [isServerAvailable, selectedThemeId, setServerAvailable, isInitialDataLoaded]);
 
-  useEffect(() => { 
+  // Загрузка шаблонов отчётов (только после загрузки задач)
+  useEffect(() => {
+    if (isServerAvailable && isInitialDataLoaded && tasks.length > 0) {
+      const fetchReportTemplates = async () => {
+        try {
+          const templatesPromises = tasks.map(async (task) => {
+            const templates = await getReportTemplates(task.id, setServerAvailable);
+            return { taskId: task.id, templates };
+          });
+          const results = await Promise.all(templatesPromises);
+          const newReportTemplates = results.reduce((acc, { taskId, templates }) => {
+            acc[taskId] = templates;
+            return acc;
+          }, {} as Record<number, ReportTemplate[]>);
+          setReportTemplates(newReportTemplates);
+        } catch (error) {
+          console.error('Ошибка загрузки шаблонов отчётов:', error);
+        }
+      };
+      fetchReportTemplates();
+    }
+  }, [isServerAvailable, tasks, isInitialDataLoaded, setServerAvailable]);
+
+  useEffect(() => {
     if (selectedThemeId !== null && isServerAvailable) {
       const fetchMethods = async () => {
         try {
@@ -54,10 +104,10 @@ const Tasks: React.FC = () => {
         }
       };
       fetchMethods();
-    } 
-  }, [selectedThemeId, isServerAvailable]);
+    }
+  }, [selectedThemeId, isServerAvailable, setServerAvailable]);
 
-  const showTaskModal = () => isEditable && isServerAvailable && setIsTaskModalOpen(true); 
+  const showTaskModal = () => isEditable && isServerAvailable && setIsTaskModalOpen(true);
 
   const showEditModal = (task: TaskWithParams) => {
     if (!isEditable || !isServerAvailable) return;
@@ -146,6 +196,56 @@ const Tasks: React.FC = () => {
     setParamSettings({});
   };
 
+  const showReportModal = (taskId: number) => {
+    if (!isEditable || !isServerAvailable) return;
+    setSelectedTaskId(taskId);
+    setEditingTemplate(null);
+    setIsReportModalOpen(true);
+  };
+
+  const handleReportTemplateSave = async (content: ReportContent[]) => {
+    if (!selectedTaskId) return;
+    try {
+      const templateData = {
+        task_id: selectedTaskId,
+        name: `Шаблон для задачи ${selectedTaskId}`,
+        content,
+      };
+      let newTemplate;
+      if (editingTemplate) {
+        newTemplate = await updateReportTemplate(editingTemplate.id, templateData, setServerAvailable);
+      } else {
+        newTemplate = await createReportTemplate(templateData, setServerAvailable);
+      }
+      setReportTemplates((prev) => ({
+        ...prev,
+        [selectedTaskId]: editingTemplate
+          ? prev[selectedTaskId].map((t) => (t.id === newTemplate.id ? newTemplate : t))
+          : [...(prev[selectedTaskId] || []), newTemplate],
+      }));
+      setIsReportModalOpen(false);
+      message.success('Шаблон успешно сохранён');
+    } catch (error) {
+      message.error('Ошибка при сохранении шаблона');
+    }
+  };
+
+  const deleteReportTemplateHandler = async (templateId: number) => {
+    try {
+      await deleteReportTemplate(templateId, setServerAvailable);
+      setReportTemplates((prev) => {
+        const updated = { ...prev };
+        for (const taskId in updated) {
+          updated[taskId] = updated[taskId].filter((t) => t.id !== templateId);
+        }
+        return updated;
+      });
+      message.success('Шаблон удалён');
+    } catch (error) {
+      message.error('Ошибка при удалении шаблона');
+    }
+  };
+
   if (isServerAvailable === null) {
     return <div>Проверка подключения к серверу...</div>;
   }
@@ -173,13 +273,23 @@ const Tasks: React.FC = () => {
           onGenerateVariants={showVariantModal}
           onAddSubtask={showSubtaskModal}
           onDeleteSubtask={deleteSubtask}
+          reportTemplates={reportTemplates}
+          onAddReportTemplate={showReportModal}
+          onEditReportTemplate={(template) => {
+            setSelectedTaskId(template.task_id);
+            setEditingTemplate(template);
+            setIsReportModalOpen(true);
+          }}
+          onDeleteReportTemplate={deleteReportTemplateHandler}
         />
       </Space>
 
       <TaskModal
         title="Добавить задачу"
         open={isTaskModalOpen}
-        onOk={() => handleTaskCreation(form, selectedThemeId, themes, tasks, setTasks, setIsTaskModalOpen, setServerAvailable)}
+        onOk={() =>
+          handleTaskCreation(form, selectedThemeId, themes, tasks, setTasks, setIsTaskModalOpen, setServerAvailable)
+        }
         onCancel={handleTaskCancel}
         form={form}
         themes={themes}
@@ -191,7 +301,16 @@ const Tasks: React.FC = () => {
         title="Редактировать задачу"
         open={isEditModalOpen}
         onOk={() =>
-          handleTaskEdit(form, selectedTaskId!, selectedThemeId, themes, tasks, setTasks, setIsEditModalOpen, setServerAvailable)
+          handleTaskEdit(
+            form,
+            selectedTaskId!,
+            selectedThemeId,
+            themes,
+            tasks,
+            setTasks,
+            setIsEditModalOpen,
+            setServerAvailable
+          )
         }
         onCancel={handleTaskCancel}
         form={form}
@@ -238,7 +357,14 @@ const Tasks: React.FC = () => {
         setParamSettings={setParamSettings}
         themeParams={themeParams}
         setThemeParams={setThemeParams}
-        setServerAvailable={setServerAvailable} // Передаем setServerAvailable
+        setServerAvailable={setServerAvailable}
+      />
+
+      <ReportTemplateEditor
+        open={isReportModalOpen}
+        onOk={handleReportTemplateSave}
+        onCancel={() => setIsReportModalOpen(false)}
+        initialContent={editingTemplate?.content || []}
       />
     </div>
   );
