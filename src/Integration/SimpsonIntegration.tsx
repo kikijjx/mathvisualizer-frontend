@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { Card, Button, Typography } from 'antd';
-import { Line } from 'react-chartjs-2';
-import { Chart, registerables } from 'chart.js';
 import IntegrationInputs from './IntegrationInputs';
+import IntegrationChart from './IntegrationChart';
 import IntegrationTable from './IntegrationTable';
 import { replaceMathFunctions } from '../mathUtils';
 import { MathJax } from 'better-react-mathjax';
@@ -16,31 +15,31 @@ import {
   calculateExactIntegral,
 } from '../mathUtils';
 
-Chart.register(...registerables);
-
 const { Paragraph } = Typography;
 
 const SimpsonIntegration: React.FC = () => {
   const [latex, setLatex] = useState<string>('sin(x)');
   const [a, setA] = useState<number>(0);
   const [b, setB] = useState<number>(10);
-  const [n, setN] = useState<number>(10);
+  const [n, setN] = useState<number>(12); // Start with an even number
   const [result, setResult] = useState<number | null>(null);
+  const [functionData, setFunctionData] = useState<{ x: number; y: number }[]>([]);
+  const [parabolaData, setParabolaData] = useState<{ x: number; y: number }[]>([]);
   const [tableData, setTableData] = useState<{ method: string; approx: number; error: number; theoreticalError: number }[]>([]);
   const [exactIntegral, setExactIntegral] = useState<number | null>(null);
-  const [functionData, setFunctionData] = useState<{ x: number; y: number }[]>([]);
-  const [simpsonData, setSimpsonData] = useState<{ x: number; y: number }[]>([]);
 
   const integrate = () => {
+    console.time('Integration Time');
+
     const processedLatex = replaceMathFunctions(latex);
     const func = (x: number) => eval(processedLatex.replace(/x/g, `(${x})`));
     const step = (b - a) / n;
 
-    // Точное значение интеграла
+    // Exact integral value
     const exact = calculateExactIntegral(a, b);
     setExactIntegral(exact);
 
-    // Генерация данных для точного графика функции
+    // Generate function data for the exact graph
     const numPoints = 500;
     const newFunctionData = [];
     for (let i = 0; i <= numPoints; i++) {
@@ -50,26 +49,19 @@ const SimpsonIntegration: React.FC = () => {
     }
     setFunctionData(newFunctionData);
 
-    // Генерация данных для метода Симпсона
-    const newSimpsonData = [];
+    // Generate data for parabolic segments (Simpson's rule uses pairs of intervals)
+    const newParabolaData = [];
     for (let i = 0; i < n; i += 2) {
       const x0 = a + i * step;
-      const x1 = x0 + step;
-      const x2 = x1 + step;
-      const y0 = func(x0);
-      const y1 = func(x1);
-      const y2 = func(x2);
-
-      for (let j = 0; j <= 10; j++) {
-        const t = j / 10;
-        const x = x0 * (1 - t) * (1 - t) + 2 * x1 * t * (1 - t) + x2 * t * t;
-        const y = y0 * (1 - t) * (1 - t) + 2 * y1 * t * (1 - t) + y2 * t * t;
-        newSimpsonData.push({ x, y });
-      }
+      const x1 = a + (i + 1) * step;
+      const x2 = a + (i + 2) * step;
+      newParabolaData.push({ x: x0, y: func(x0) });
+      newParabolaData.push({ x: x1, y: func(x1) });
+      newParabolaData.push({ x: x2, y: func(x2) });
     }
-    setSimpsonData(newSimpsonData);
+    setParabolaData(newParabolaData);
 
-    // Вычисление результатов для всех методов
+    // Calculate results for all methods
     const methods = [
       { name: 'Левых прямоугольников', func: leftRectangles },
       { name: 'Правых прямоугольников', func: rightRectangles },
@@ -79,51 +71,31 @@ const SimpsonIntegration: React.FC = () => {
     ];
 
     const newTableData = methods.map((method) => {
-      const approx = method.func(func, a, b, n);
+      let approx: number;
+      try {
+        approx = method.func(func, a, b, n);
+      } catch (e) {
+        approx = NaN; // Handle the case where Simpson's rule fails due to odd n
+      }
       const error = Math.abs(exact - approx);
       const theoreticalError = calculateTheoreticalError(method.name, func, a, b, n);
-      return {
-        method: method.name,
-        approx,
-        error,
-        theoreticalError,
-      };
+      return { method: method.name, approx, error, theoreticalError };
     });
 
     setTableData(newTableData);
 
-    // Результат для выбранного метода (Симпсона)
-    setResult(simpson(func, a, b, n));
-  };
+    // Result for Simpson's method
+    const simpsonResult = simpson(func, a, b, n);
+    setResult(simpsonResult);
 
-  const chartData = {
-    datasets: [
-      {
-        label: 'Функция',
-        data: functionData.map((p) => ({ x: p.x, y: p.y })),
-        borderColor: 'rgba(75, 192, 192, 1)', // Цвет функции
-        borderWidth: 3, // Толщина линии функции
-        fill: false,
-        pointRadius: 0,
-      },
-      {
-        label: 'Параболы Симпсона',
-        data: simpsonData.map((p) => ({ x: p.x, y: p.y })),
-        borderColor: 'rgba(255, 99, 132, 1)', // Цвет парабол
-        borderWidth: 3, // Увеличиваем толщину линий парабол
-        fill: {
-          target: 'origin', // Заливка до оси X (начала координат)
-          above: 'rgba(255, 99, 132, 0.1)', // Цвет заливки
-          
-        },
-        pointRadius: 0,
-      },
-    ],
+    console.log(`Число разбиений (n): ${n}`);
+    console.log(`Найденное значение интеграла: ${simpsonResult}`);
+    console.timeEnd('Integration Time');
   };
 
   return (
     <Card title="Метод Симпсона" style={{ width: '100%', maxWidth: '800px', margin: '0 auto' }}>
-      {/* Теория */}
+      {/* Theory */}
       <Typography style={{ textAlign: 'left', padding: '0 20px' }}>
         <Paragraph>
           Пусть требуется вычислить определённый интеграл:
@@ -155,7 +127,7 @@ const SimpsonIntegration: React.FC = () => {
         </Paragraph>
       </Typography>
 
-      {/* Ввод данных */}
+      {/* Inputs */}
       <IntegrationInputs
         latex={latex}
         setLatex={setLatex}
@@ -167,12 +139,20 @@ const SimpsonIntegration: React.FC = () => {
         setN={setN}
       />
 
-      {/* Кнопка для интегрирования */}
+      {/* Integrate Button */}
       <Button onClick={integrate} style={{ marginTop: '10px' }}>
         Интегрировать
       </Button>
 
-      {/* Точное значение интеграла */}
+      {/* Chart and Result */}
+      <IntegrationChart
+        functionData={functionData}
+        segmentData={parabolaData}
+        result={result}
+        method="Симпсона"
+      />
+
+      {/* Exact Integral */}
       {exactIntegral !== null && (
         <Typography style={{ marginTop: '20px' }}>
           <Paragraph>
@@ -181,19 +161,7 @@ const SimpsonIntegration: React.FC = () => {
         </Typography>
       )}
 
-      {/* График */}
-      <div style={{ height: '400px', marginTop: '20px' }}>
-        <Line
-          data={chartData}
-          options={{
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: { x: { type: 'linear' } },
-          }}
-        />
-      </div>
-
-      {/* Таблица с результатами */}
+      {/* Table */}
       <IntegrationTable
         data={tableData}
         highlightedMethod="Симпсона"
