@@ -3,7 +3,7 @@ import { Button, List, Space, Typography, Collapse } from 'antd';
 import { MathJax } from 'better-react-mathjax';
 import { EditOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { TaskWithParams, MethodWithParams, ThemeWithParams, ReportTemplate } from './taskUtils';
-import { Document, Packer, Paragraph, Table as DocxTable, TableRow, TableCell, TextRun } from 'docx';
+import { Document, Packer, Paragraph, Table as DocxTable, TableRow, TableCell, TextRun, ImageRun } from 'docx';
 import { saveAs } from 'file-saver';
 
 const { Text, Title } = Typography;
@@ -104,10 +104,34 @@ const TaskList: React.FC<TaskListProps> = ({
                   ],
                 });
               case 'image':
-                // Для изображений нужно добавить поддержку через URL или заглушку
-                const imageData = item.value as { url: string; alt?: string };
+                const imageData = item.value as { data: string; alt?: string };
+                if (imageData.data) {
+                  try {
+                    // Удаляем префикс "data:image/...;base64," если он есть
+                    const base64String = imageData.data.includes('base64,')
+                      ? imageData.data.split('base64,')[1]
+                      : imageData.data;
+                    const binaryData = Uint8Array.from(atob(base64String), (c) => c.charCodeAt(0));
+                    return new Paragraph({
+                      children: [
+                        new ImageRun({
+                          data: binaryData,
+                          transformation: {
+                            width: 200,
+                            height: 200,
+                          },
+                        }),
+                      ],
+                    });
+                  } catch (error) {
+                    console.error('Ошибка обработки изображения:', error);
+                    return new Paragraph({
+                      children: [new TextRun(`Ошибка загрузки изображения${imageData.alt ? ` (${imageData.alt})` : ''}`)],
+                    });
+                  }
+                }
                 return new Paragraph({
-                  children: [new TextRun(`Изображение: ${imageData.url} (${imageData.alt || 'без описания'})`)],
+                  children: [new TextRun(`Изображение отсутствует${imageData.alt ? ` (${imageData.alt})` : ''}`)],
                 });
               default:
                 return new Paragraph('');
@@ -119,6 +143,8 @@ const TaskList: React.FC<TaskListProps> = ({
 
     Packer.toBlob(doc).then((blob) => {
       saveAs(blob, `Шаблон_отчёта_${template.id}.docx`);
+    }).catch((error) => {
+      console.error('Ошибка при создании файла Word:', error);
     });
   };
 

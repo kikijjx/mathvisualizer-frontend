@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Button, Input, Modal, Space, Table, InputRef } from 'antd';
-import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import React, { useState, useEffect } from 'react';
+import { Button, Input, Modal, Space, Table } from 'antd';
+import { PlusOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/icons';
 import { ReportContent } from './taskUtils';
 
 interface ReportTemplateEditorProps {
@@ -16,7 +16,7 @@ interface TableData {
 }
 
 interface ImageData {
-  url: string;
+  data: string;
   alt: string;
 }
 
@@ -28,6 +28,11 @@ const ReportTemplateEditor: React.FC<ReportTemplateEditorProps> = ({
 }) => {
   const [content, setContent] = useState<ReportContent[]>(initialContent);
 
+  // Синхронизируем content с initialContent при изменении
+  useEffect(() => {
+    setContent(initialContent);
+  }, [initialContent]);
+
   const addText = () => {
     setContent([...content, { type: 'text', value: '' }]);
   };
@@ -37,7 +42,7 @@ const ReportTemplateEditor: React.FC<ReportTemplateEditorProps> = ({
   };
 
   const addImage = () => {
-    setContent([...content, { type: 'image', value: { url: '', alt: '' } }]);
+    setContent([...content, { type: 'image', value: { data: '', alt: '' } }]);
   };
 
   const updateContent = (index: number, updatedValue: any) => {
@@ -63,6 +68,19 @@ const ReportTemplateEditor: React.FC<ReportTemplateEditorProps> = ({
   const updateTableRows = (index: number, newRows: string[][]) => {
     const tableData = content[index].value as TableData;
     updateContent(index, { columns: tableData.columns, rows: newRows });
+  };
+
+  const handleImageUpload = (index: number, event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64String = reader.result as string;
+        const imageData = content[index].value as ImageData;
+        updateContent(index, { data: base64String, alt: imageData.alt });
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const renderContentItem = (item: ReportContent, index: number) => {
@@ -135,12 +153,22 @@ const ReportTemplateEditor: React.FC<ReportTemplateEditorProps> = ({
       case 'image':
         const imageData = item.value as ImageData;
         return (
-          <Space>
-            <Input
-              value={imageData.url}
-              onChange={(e) => updateContent(index, { ...imageData, url: e.target.value })}
-              placeholder="URL изображения"
-            />
+          <Space direction="vertical">
+            <Button>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleImageUpload(index, e)}
+                style={{ display: 'none' }}
+                id={`image-upload-${index}`}
+              />
+              <label htmlFor={`image-upload-${index}`}>
+                <UploadOutlined /> Загрузить изображение
+              </label>
+            </Button>
+            {imageData.data && (
+              <img src={imageData.data} alt={imageData.alt} style={{ maxWidth: '200px', marginTop: 8 }} />
+            )}
             <Input
               value={imageData.alt}
               onChange={(e) => updateContent(index, { ...imageData, alt: e.target.value })}

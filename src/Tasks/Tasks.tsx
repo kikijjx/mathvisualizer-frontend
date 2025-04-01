@@ -199,10 +199,10 @@ const Tasks: React.FC = () => {
   const showReportModal = (taskId: number) => {
     if (!isEditable || !isServerAvailable) return;
     setSelectedTaskId(taskId);
-    setEditingTemplate(null);
+    setEditingTemplate(null); // Сбрасываем перед созданием нового шаблона
     setIsReportModalOpen(true);
   };
-
+  
   const handleReportTemplateSave = async (content: ReportContent[]) => {
     if (!selectedTaskId) return;
     try {
@@ -360,12 +360,12 @@ const Tasks: React.FC = () => {
         setServerAvailable={setServerAvailable}
       />
 
-      <ReportTemplateEditor
-        open={isReportModalOpen}
-        onOk={handleReportTemplateSave}
-        onCancel={() => setIsReportModalOpen(false)}
-        initialContent={editingTemplate?.content || []}
-      />
+    <ReportTemplateEditor
+      open={isReportModalOpen}
+      onOk={handleReportTemplateSave}
+      onCancel={() => setIsReportModalOpen(false)}
+      initialContent={editingTemplate ? editingTemplate.content : []} // Передаём content редактируемого шаблона
+    />
     </div>
   );
 };
