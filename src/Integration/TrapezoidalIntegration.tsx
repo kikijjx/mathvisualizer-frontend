@@ -3,7 +3,7 @@ import { Card, Button, Typography } from 'antd';
 import IntegrationInputs from './IntegrationInputs';
 import IntegrationChart from './IntegrationChart';
 import IntegrationTable from './IntegrationTable';
-import { replaceMathFunctions } from '../mathUtils';
+import { replaceMathFunctions, calculateExactIntegral, calculateNForPrecision } from '../mathUtils';
 import { MathJax } from 'better-react-mathjax';
 import {
   leftRectangles,
@@ -12,7 +12,6 @@ import {
   trapezoidal,
   simpson,
   calculateTheoreticalError,
-  calculateExactIntegral,
 } from '../mathUtils';
 
 const { Paragraph } = Typography;
@@ -22,25 +21,31 @@ const TrapezoidalIntegration: React.FC = () => {
   const [a, setA] = useState<number>(0);
   const [b, setB] = useState<number>(10);
   const [n, setN] = useState<number>(12);
+  const [precision, setPrecision] = useState<number>(0.001);
+  const [mode, setMode] = useState<'n' | 'precision'>('n');
   const [result, setResult] = useState<number | null>(null);
   const [functionData, setFunctionData] = useState<{ x: number; y: number }[]>([]);
   const [trapezoidData, setTrapezoidData] = useState<{ x: number; y: number }[]>([]);
-  const [tableData, setTableData] = useState<{ method: string; approx: number; error: number; theoreticalError: number }[]>([]);
+  const [tableData, setTableData] = useState<{ method: string; approx: number; error: number; theoreticalError: number; n?: number }[]>([]);
   const [exactIntegral, setExactIntegral] = useState<number | null>(null);
 
   const integrate = () => {
-    // Начало измерения времени
     console.time('Integration Time');
 
     const processedLatex = replaceMathFunctions(latex);
     const func = (x: number) => eval(processedLatex.replace(/x/g, `(${x})`));
-    const step = (b - a) / n;
-
-    // Точное значение интеграла
     const exact = calculateExactIntegral(a, b);
     setExactIntegral(exact);
 
-    // Генерация данных для точного графика функции
+    // Определяем число разбиений в зависимости от режима
+    let currentN = n;
+    if (mode === 'precision') {
+      currentN = calculateNForPrecision(func, a, b, precision, 'Трапеций');
+      setN(currentN);
+    }
+    const step = (b - a) / currentN;
+
+    // Генерация данных для графика функции
     const numPoints = 500;
     const newFunctionData = [];
     for (let i = 0; i <= numPoints; i++) {
@@ -52,7 +57,7 @@ const TrapezoidalIntegration: React.FC = () => {
 
     // Генерация данных для трапеций
     const newTrapezoidData = [];
-    for (let i = 0; i <= n; i++) {
+    for (let i = 0; i <= currentN; i++) {
       const x = a + i * step;
       const y = func(x);
       newTrapezoidData.push({ x, y });
@@ -69,34 +74,31 @@ const TrapezoidalIntegration: React.FC = () => {
     ];
 
     const newTableData = methods.map((method) => {
-      const approx = method.func(func, a, b, n);
+      const usedN = mode === 'precision' ? calculateNForPrecision(func, a, b, precision, method.name) : currentN;
+      const approx = method.func(func, a, b, usedN);
       const error = Math.abs(exact - approx);
-      const theoreticalError = calculateTheoreticalError(method.name, func, a, b, n);
+      const theoreticalError = calculateTheoreticalError(method.name, func, a, b, usedN);
       return {
         method: method.name,
         approx,
         error,
         theoreticalError,
+        n: mode === 'precision' ? usedN : undefined,
       };
     });
 
     setTableData(newTableData);
 
-    // Результат для выбранного метода (трапеций)
-    const trapezoidalResult = trapezoidal(func, a, b, n);
+    const trapezoidalResult = trapezoidal(func, a, b, currentN);
     setResult(trapezoidalResult);
 
-    // Вывод данных в консоль текстом
-    console.log(`Число разбиений (n): ${n}`);
+    console.log(`Число разбиений (n): ${currentN}`);
     console.log(`Найденное значение интеграла: ${trapezoidalResult}`);
-    
-    // Конец измерения времени (время автоматически выводится в консоль)
     console.timeEnd('Integration Time');
   };
 
   return (
     <Card title="Метод трапеций" style={{ width: '100%', maxWidth: '800px', margin: '0 auto' }}>
-      {/* Теория */}
       <Typography style={{ textAlign: 'left', padding: '0 20px' }}>
         <Paragraph>
           Пусть требуется вычислить определённый интеграл:
@@ -130,8 +132,7 @@ const TrapezoidalIntegration: React.FC = () => {
           <span>Высота трапеций <MathJax inline dynamic>\( h \)</MathJax> выбирается достаточно малой, чтобы на каждом отрезке <MathJax inline dynamic>\( [x_i, x_i+1] \)</MathJax> функцию <MathJax inline dynamic>\( f(x) \)</MathJax> можно было заменить линейной.</span>
         </Paragraph>
       </Typography>
-      
-      {/* Ввод данных */}
+
       <IntegrationInputs
         latex={latex}
         setLatex={setLatex}
@@ -141,21 +142,22 @@ const TrapezoidalIntegration: React.FC = () => {
         setB={setB}
         n={n}
         setN={setN}
+        precision={precision}
+        setPrecision={setPrecision}
+        mode={mode}
+        setMode={setMode}
       />
 
-      {/* Кнопка для интегрирования */}
       <Button onClick={integrate} style={{ marginTop: '10px' }}>
         Интегрировать
       </Button>
 
-      {/* График и результат */}
       <IntegrationChart
         functionData={functionData}
         segmentData={trapezoidData}
         result={result}
       />
 
-      {/* Точное значение интеграла */}
       {exactIntegral !== null && (
         <Typography style={{ marginTop: '20px' }}>
           <Paragraph>
@@ -164,10 +166,10 @@ const TrapezoidalIntegration: React.FC = () => {
         </Typography>
       )}
 
-      {/* Таблица с результатами */}
       <IntegrationTable
         data={tableData}
         highlightedMethod="Трапеций"
+        showN={mode === 'precision'}
       />
     </Card>
   );

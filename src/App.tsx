@@ -10,6 +10,9 @@ import Tasks from './Tasks/Tasks';
 import AdminPanel from './AdminPanel';
 import { getThemes, getTasks, getMethods, Theme, Task, Method } from './api';
 import './App.css';
+import EulerDiffur from './Diffurs/EulerDiffur';
+import KoshiDiffur from './Diffurs/KoshiDiffur';
+import RungeDiffur from './Diffurs/RungeDiffur';
 
 const App: React.FC = () => {
   const [themes, setThemes] = useState<Theme[]>([]);
@@ -67,6 +70,21 @@ const App: React.FC = () => {
       key: 'simpson',
       label: 'Метод Симпсона',
       children: <SimpsonIntegration />,
+    },
+    {
+      key: 'euler',
+      label: 'Метод Эйлера',
+      children: <EulerDiffur />,
+    },
+    {
+      key: 'koshi',
+      label: 'Метод Эйлера-Коши',
+      children: <KoshiDiffur />,
+    },
+    {
+      key: 'runge',
+      label: 'Метод Рунге-Кутта',
+      children: <RungeDiffur />,
     },
   ];
 

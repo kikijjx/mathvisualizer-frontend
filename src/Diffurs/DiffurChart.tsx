@@ -1,5 +1,5 @@
-import React from "react";
-import { Line } from "react-chartjs-2";
+import React from 'react';
+import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -9,7 +9,7 @@ import {
   Title,
   Tooltip,
   Legend,
-} from "chart.js";
+} from 'chart.js';
 
 ChartJS.register(
   CategoryScale,
@@ -22,37 +22,69 @@ ChartJS.register(
 );
 
 interface DiffurChartProps {
-  t: number[];
-  y: number[];
+  eulerData: { x: number; y: number }[];
+  exactData: { x: number; y: number }[];
 }
 
-const DiffurChart: React.FC<DiffurChartProps> = ({ t, y }) => {
-  const data = {
-    labels: t,
-    datasets: [
-      {
-        label: "y(t)",
-        data: y,
-        borderColor: "rgba(75, 192, 192, 1)",
-        backgroundColor: "rgba(75, 192, 192, 0.2)",
-        fill: false,
-        tension: 0.1,
-      },
-    ],
+const DiffurChart: React.FC<DiffurChartProps> = ({ eulerData, exactData }) => {
+  // Данные для графика метода Эйлера
+  const eulerDataset = {
+    label: 'Метод Эйлера',
+    data: eulerData.map((point) => ({ x: point.x, y: point.y })),
+    borderColor: 'rgba(75, 192, 192, 1)',
+    fill: false,
+    pointRadius: 3,
   };
 
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
+  // Данные для точного решения (если есть)
+  const exactDataset = exactData.length > 0
+    ? {
+        label: 'Точное решение',
+        data: exactData.map((point) => ({ x: point.x, y: point.y })),
+        borderColor: 'rgba(255, 99, 132, 1)',
+        fill: false,
+        pointRadius: 0,
+      }
+    : null;
+
+  const chartData = {
+    datasets: exactDataset ? [eulerDataset, exactDataset] : [eulerDataset],
+  };
+
+  const chartOptions = {
     scales: {
-      x: { title: { display: true, text: "Время (t)" } },
-      y: { title: { display: true, text: "y(t)" } },
+      x: {
+        type: 'linear' as const,
+        title: {
+          display: true,
+          text: 'x',
+        },
+      },
+      y: {
+        type: 'linear' as const,
+        title: {
+          display: true,
+          text: 'y',
+        },
+      },
+    },
+    plugins: {
+      tooltip: {
+        callbacks: {
+          label: (context: any) => {
+            const datasetIndex = context.datasetIndex;
+            const dataIndex = context.dataIndex;
+            const point = datasetIndex === 0 ? eulerData[dataIndex] : exactData[dataIndex];
+            return `x: ${point.x.toFixed(4)}, y: ${point.y.toFixed(4)}`;
+          },
+        },
+      },
     },
   };
 
   return (
-    <div style={{ height: "400px", marginTop: "20px" }}>
-      <Line data={data} options={options} />
+    <div style={{ marginTop: '20px', height: '400px' }}>
+      <Line data={chartData} options={chartOptions} />
     </div>
   );
 };

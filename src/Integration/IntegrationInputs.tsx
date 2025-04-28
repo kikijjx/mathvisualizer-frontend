@@ -1,5 +1,5 @@
 import React from 'react';
-import { Input, Slider, Typography } from 'antd';
+import { Input, Slider, Typography, Radio } from 'antd';
 import { MathJax } from 'better-react-mathjax';
 
 const { Text } = Typography;
@@ -13,6 +13,10 @@ interface IntegrationInputsProps {
   setB: (value: number) => void;
   n: number;
   setN: (value: number) => void;
+  precision: number;
+  setPrecision: (value: number) => void;
+  mode: 'n' | 'precision';
+  setMode: (value: 'n' | 'precision') => void;
 }
 
 const IntegrationInputs: React.FC<IntegrationInputsProps> = ({
@@ -24,6 +28,10 @@ const IntegrationInputs: React.FC<IntegrationInputsProps> = ({
   setB,
   n,
   setN,
+  precision,
+  setPrecision,
+  mode,
+  setMode,
 }) => {
   return (
     <>
@@ -50,18 +58,38 @@ const IntegrationInputs: React.FC<IntegrationInputsProps> = ({
         onChange={(e) => setB(Number(e.target.value))}
         type="number"
       />
-      <Input
-        addonBefore="n ="
-        value={n}
-        onChange={(e) => setN(Number(e.target.value))}
-        type="number"
-      />
-      <Slider
-        min={1}
-        max={100}
-        value={n}
-        onChange={(value) => setN(value)}
-      />
+      <Radio.Group
+        onChange={(e) => setMode(e.target.value)}
+        value={mode}
+        style={{ margin: '10px 0' }}
+      >
+        <Radio value="n">Число разбиений (n)</Radio>
+        <Radio value="precision">Точность</Radio>
+      </Radio.Group>
+      {mode === 'n' ? (
+        <>
+          <Input
+            addonBefore="n ="
+            value={n}
+            onChange={(e) => setN(Number(e.target.value))}
+            type="number"
+          />
+          <Slider
+            min={1}
+            max={100}
+            value={n}
+            onChange={(value) => setN(value)}
+          />
+        </>
+      ) : (
+        <Input
+          addonBefore="Точность ="
+          value={precision}
+          onChange={(e) => setPrecision(Number(e.target.value))}
+          type="number"
+          step="0.0001"
+        />
+      )}
     </>
   );
 };

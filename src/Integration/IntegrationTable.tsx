@@ -7,14 +7,16 @@ interface TableData {
   approx: number;
   error: number;
   theoreticalError: number;
+  n?: number;
 }
 
 interface IntegrationTableProps {
   data: TableData[];
   highlightedMethod: string;
+  showN: boolean;
 }
 
-const IntegrationTable: React.FC<IntegrationTableProps> = ({ data, highlightedMethod }) => {
+const IntegrationTable: React.FC<IntegrationTableProps> = ({ data, highlightedMethod, showN }) => {
   const columns = [
     {
       title: 'Метод',
@@ -44,6 +46,16 @@ const IntegrationTable: React.FC<IntegrationTableProps> = ({ data, highlightedMe
       key: 'theoreticalError',
       render: (value: number) => value.toFixed(6),
     },
+    ...(showN
+      ? [
+          {
+            title: 'n',
+            dataIndex: 'n',
+            key: 'n',
+            render: (value: number) => (value !== undefined ? value : '-'),
+          },
+        ]
+      : []),
   ];
 
   return (

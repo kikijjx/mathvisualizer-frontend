@@ -3,7 +3,7 @@ import { Card, Button, Typography } from 'antd';
 import IntegrationInputs from './IntegrationInputs';
 import IntegrationChart from './IntegrationChart';
 import IntegrationTable from './IntegrationTable';
-import { replaceMathFunctions } from '../mathUtils';
+import { replaceMathFunctions, calculateNForPrecision } from '../mathUtils';
 import { MathJax } from 'better-react-mathjax';
 import {
   leftRectangles,
@@ -22,10 +22,12 @@ const SimpsonIntegration: React.FC = () => {
   const [a, setA] = useState<number>(0);
   const [b, setB] = useState<number>(10);
   const [n, setN] = useState<number>(12);
+  const [precision, setPrecision] = useState<number>(0.001);
+  const [mode, setMode] = useState<'n' | 'precision'>('n');
   const [result, setResult] = useState<number | null>(null);
   const [functionData, setFunctionData] = useState<{ x: number; y: number }[]>([]);
   const [parabolaData, setParabolaData] = useState<{ x: number; y: number }[]>([]);
-  const [tableData, setTableData] = useState<{ method: string; approx: number; error: number; theoreticalError: number }[]>([]);
+  const [tableData, setTableData] = useState<{ method: string; approx: number; error: number; theoreticalError: number; n?: number }[]>([]);
   const [exactIntegral, setExactIntegral] = useState<number | null>(null);
 
   const integrate = () => {
@@ -33,11 +35,24 @@ const SimpsonIntegration: React.FC = () => {
 
     const processedLatex = replaceMathFunctions(latex);
     const func = (x: number) => eval(processedLatex.replace(/x/g, `(${x})`));
-    const step = (b - a) / n;
-
     const exact = calculateExactIntegral(a, b);
     setExactIntegral(exact);
 
+    // Определяем число разбиений в зависимости от режима
+    let currentN = n;
+    if (mode === 'precision') {
+      currentN = calculateNForPrecision(func, a, b, precision, 'Симпсона');
+      // Метод Симпсона требует чётное n
+      currentN = currentN % 2 === 0 ? currentN : currentN + 1;
+      setN(currentN);
+    } else {
+      // Если режим числа разбиений, также проверяем, что n чётное
+      currentN = n % 2 === 0 ? n : n + 1;
+      setN(currentN);
+    }
+    const step = (b - a) / currentN;
+
+    // Генерация данных для графика функции
     const numPoints = 500;
     const newFunctionData = [];
     for (let i = 0; i <= numPoints; i++) {
@@ -50,13 +65,13 @@ const SimpsonIntegration: React.FC = () => {
     // Генерация данных для парабол с большим количеством точек
     const newParabolaData: { x: number; y: number }[] = [];
     const pointsPerParabola = 20; // Количество точек для каждой параболы
-    for (let i = 0; i < n; i += 2) {
+    for (let i = 0; i < currentN; i += 2) {
       const x0 = a + i * step;
       const x1 = a + (i + 1) * step;
       const x2 = a + (i + 2) * step;
       const y0 = func(x0);
       const y1 = func(x1);
-      const y2 = func(x2);
+      const y2 = x2 <= b ? func(x2) : func(b); // Проверка, чтобы не выйти за пределы b
 
       // Вычисляем коэффициенты параболы ax² + bx + c через три точки
       const a_parabola = (y2 - 2 * y1 + y0) / (2 * step * step);
@@ -66,12 +81,15 @@ const SimpsonIntegration: React.FC = () => {
       // Генерируем точки для параболы
       for (let j = 0; j <= pointsPerParabola; j++) {
         const x = x0 + (j / pointsPerParabola) * 2 * step; // От x0 до x2
-        const y = a_parabola * x * x + b_parabola * x + c_parabola;
-        newParabolaData.push({ x, y });
+        if (x <= b) { // Проверка, чтобы не выйти за пределы b
+          const y = a_parabola * x * x + b_parabola * x + c_parabola;
+          newParabolaData.push({ x, y });
+        }
       }
     }
     setParabolaData(newParabolaData);
 
+    // Вычисление результатов для всех методов
     const methods = [
       { name: 'Левых прямоугольников', func: leftRectangles },
       { name: 'Правых прямоугольников', func: rightRectangles },
@@ -81,23 +99,32 @@ const SimpsonIntegration: React.FC = () => {
     ];
 
     const newTableData = methods.map((method) => {
+      const usedN = mode === 'precision' ? calculateNForPrecision(func, a, b, precision, method.name) : currentN;
+      // Для метода Симпсона корректируем n, чтобы было чётным
+      const finalN = method.name === 'Симпсона' ? (usedN % 2 === 0 ? usedN : usedN + 1) : usedN;
       let approx: number;
       try {
-        approx = method.func(func, a, b, n);
+        approx = method.func(func, a, b, finalN);
       } catch (e) {
         approx = NaN;
       }
       const error = Math.abs(exact - approx);
-      const theoreticalError = calculateTheoreticalError(method.name, func, a, b, n);
-      return { method: method.name, approx, error, theoreticalError };
+      const theoreticalError = calculateTheoreticalError(method.name, func, a, b, finalN);
+      return {
+        method: method.name,
+        approx,
+        error,
+        theoreticalError,
+        n: mode === 'precision' ? finalN : undefined,
+      };
     });
 
     setTableData(newTableData);
 
-    const simpsonResult = simpson(func, a, b, n);
+    const simpsonResult = simpson(func, a, b, currentN);
     setResult(simpsonResult);
 
-    console.log(`Число разбиений (n): ${n}`);
+    console.log(`Число разбиений (n): ${currentN}`);
     console.log(`Найденное значение интеграла: ${simpsonResult}`);
     console.timeEnd('Integration Time');
   };
@@ -115,18 +142,10 @@ const SimpsonIntegration: React.FC = () => {
           <MathJax>{`\\[ S_i = \\frac{h}{3} \\left( f(x_i) + 4f\\left(x_i + \\frac{h}{2}\\right) + f(x_{i+1}) \\right) \\]`}</MathJax>
           где:
           <ul>
-            <li>
-              <span> <MathJax inline dynamic>{`\\( S_i \\)`}</MathJax> — площадь <MathJax inline dynamic>{`\\( i \\)`}</MathJax>-го сегмента </span>
-            </li>
-            <li>
-              <span> <MathJax inline dynamic>{`\\( f(x_i) \\)`}</MathJax>, <MathJax inline dynamic>{`\\( f\\left(x_i + \\frac{h}{2}\\right) \\)`}</MathJax>, <MathJax inline dynamic>{`\\( f(x_{i+1}) \\)`}</MathJax> — значения функции в точках отрезка </span>
-            </li>
-            <li>
-              <span> <MathJax inline dynamic>{`\\( h = \\frac{b - a}{n} \\)`}</MathJax> — шаг разбиения (ширина сегмента) </span>
-            </li>
-            <li>
-              <span> <MathJax inline dynamic>{`\\( n \\)`}</MathJax> — количество разбиений (должно быть чётным) </span>
-            </li>
+            <li><MathJax inline dynamic>{`\\( S_i \\)`}</MathJax> — площадь <MathJax inline dynamic>{`\\( i \\)`}</MathJax>-го сегмента</li>
+            <li><MathJax inline dynamic>{`\\( f(x_i) \\)`}</MathJax>, <MathJax inline dynamic>{`\\( f\\left(x_i + \\frac{h}{2}\\right) \\)`}</MathJax>, <MathJax inline dynamic>{`\\( f(x_{i+1}) \\)`}</MathJax> — значения функции в точках отрезка</li>
+            <li><MathJax inline dynamic>{`\\( h = \\frac{b - a}{n} \\)`}</MathJax> — шаг разбиения (ширина сегмента)</li>
+            <li><MathJax inline dynamic>{`\\( n \\)`}</MathJax> — количество разбиений (должно быть чётным)</li>
           </ul>
         </Paragraph>
         <Paragraph>
@@ -144,6 +163,10 @@ const SimpsonIntegration: React.FC = () => {
         setB={setB}
         n={n}
         setN={setN}
+        precision={precision}
+        setPrecision={setPrecision}
+        mode={mode}
+        setMode={setMode}
       />
 
       <Button onClick={integrate} style={{ marginTop: '10px' }}>
@@ -168,6 +191,7 @@ const SimpsonIntegration: React.FC = () => {
       <IntegrationTable
         data={tableData}
         highlightedMethod="Симпсона"
+        showN={mode === 'precision'}
       />
     </Card>
   );

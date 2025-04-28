@@ -195,7 +195,6 @@ const TaskList: React.FC<TaskListProps> = ({
                             >
                               <Text>
                                 {index + 1}) {method ? method.description : 'Метод не найден'}{' '}
-                                {subtask.params && `(${formatParams(subtask.params)})`}
                               </Text>
                             </List.Item>
                           );
@@ -286,7 +285,7 @@ const TaskList: React.FC<TaskListProps> = ({
                         icon={<PlusOutlined />}
                         onClick={() => onAddSubtask(task.id)}
                       >
-                        Подзадача
+                        Метод
                       </Button>
                       <Button
                         type="dashed"

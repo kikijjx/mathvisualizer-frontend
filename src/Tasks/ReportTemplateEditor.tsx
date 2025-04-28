@@ -38,7 +38,7 @@ const ReportTemplateEditor: React.FC<ReportTemplateEditorProps> = ({
   };
 
   const addTable = () => {
-    setContent([...content, { type: 'table', value: { columns: ['Колонка 1'], rows: [['']] } }]);
+    setContent([...content, { type: 'table', value: { columns: ['Столбец 1'], rows: [['']] } }]);
   };
 
   const addImage = () => {
@@ -111,7 +111,7 @@ const ReportTemplateEditor: React.FC<ReportTemplateEditorProps> = ({
                 />
               ))}
               <Button
-                onClick={() => updateTableColumns(index, [...tableData.columns, `Колонка ${tableData.columns.length + 1}`])}
+                onClick={() => updateTableColumns(index, [...tableData.columns, `Столбец ${tableData.columns.length + 1}`])}
                 icon={<PlusOutlined />}
               >
                 Добавить столбец

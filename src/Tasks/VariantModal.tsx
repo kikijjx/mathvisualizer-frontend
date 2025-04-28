@@ -2,12 +2,15 @@ import React, { useRef, useEffect, useState } from 'react';
 import { Button, Modal, Form, InputNumber, Checkbox, Slider, Typography, Divider, message } from 'antd';
 import { MathJax } from 'better-react-mathjax';
 import { Task, getThemeParams } from '../api';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import pdfMake from 'pdfmake/build/pdfmake';
+import * as pdfFonts from 'pdfmake/build/vfs_fonts';
+import { Document, Packer, Paragraph, TextRun, Table, TableCell, TableRow, WidthType, BorderStyle } from 'docx';
 import { saveAs } from 'file-saver';
-import { Document, Packer, Paragraph, TextRun } from 'docx';
 
 const { Text } = Typography;
+
+pdfMake.vfs = pdfFonts.vfs;
+// Не задаём pdfMake.fonts, используем встроенные шрифты Roboto из vfs_fonts
 
 interface ParamSettings {
   min?: number;
@@ -36,7 +39,7 @@ interface VariantModalProps {
   setParamSettings: (settings: Record<string, ParamSettings>) => void;
   themeParams: { name: string; type: string; id: number }[];
   setThemeParams: (params: { name: string; type: string; id: number }[]) => void;
-  setServerAvailable: (available: boolean) => void; // Добавляем пропс
+  setServerAvailable: (available: boolean) => void;
 }
 
 const VariantModal: React.FC<VariantModalProps> = ({
@@ -54,17 +57,18 @@ const VariantModal: React.FC<VariantModalProps> = ({
   setParamSettings,
   themeParams,
   setThemeParams,
-  setServerAvailable, // Добавляем в деструктуризацию
+  setServerAvailable,
 }) => {
   const [form] = Form.useForm();
   const contentRef = useRef<HTMLDivElement>(null);
   const [latexOptions, setLatexOptions] = useState<Record<string, LatexOptions>>({});
+  const [startTime, setStartTime] = useState<number | null>(null);
 
   useEffect(() => {
     if (task && !themeParams.length) {
       const fetchThemeParams = async () => {
         try {
-          const params = await getThemeParams(task.theme_id, setServerAvailable); // Передаем setServerAvailable
+          const params = await getThemeParams(task.theme_id, setServerAvailable);
           setThemeParams(params);
           initializeSelectedParams(params);
         } catch (error) {
@@ -76,7 +80,16 @@ const VariantModal: React.FC<VariantModalProps> = ({
     } else {
       initializeSelectedParams(themeParams);
     }
-  }, [task, themeParams, setThemeParams, setServerAvailable]); // Добавляем setServerAvailable в зависимости
+  }, [task, themeParams, setThemeParams, setServerAvailable]);
+
+  useEffect(() => {
+    if (generatedVariants.length > 0 && startTime !== null) {
+      const endTime = performance.now();
+      const duration = endTime - startTime;
+      console.log(`Время от нажатия кнопки до отображения вариантов: ${duration.toFixed(2)}ms`);
+      setStartTime(null);
+    }
+  }, [generatedVariants, startTime]);
 
   const initializeSelectedParams = (params: { name: string; type: string; id: number }[]) => {
     const selected: Record<string, boolean> = {};
@@ -106,14 +119,15 @@ const VariantModal: React.FC<VariantModalProps> = ({
       return;
     }
 
+    setStartTime(performance.now());
+
     const variants = Array.from({ length: numVariants }, (_, index) =>
       generateTaskVariant(task, index + 1)
     );
     setGeneratedVariants(variants);
 
-    // Собираем уникальные LaTeX-выражения
     const latexExpressions = new Set<string>();
-    const maxAttempts = numVariants * 10; // Лимит попыток, чтобы избежать бесконечного цикла
+    const maxAttempts = numVariants * 10;
     let attempts = 0;
 
     variants.forEach((variant) => {
@@ -136,7 +150,6 @@ const VariantModal: React.FC<VariantModalProps> = ({
       });
     });
 
-    // Если уникальных выражений меньше, чем нужно, генерируем дополнительные
     const latexParamKeys = themeParams
       .filter((p) => p.type === 'latex' && selectedParams[`param_${p.id}`])
       .map((p) => `param_${p.id}`);
@@ -206,9 +219,9 @@ const VariantModal: React.FC<VariantModalProps> = ({
     const operations = ['+', '-', '*', '/'];
     const maxCoefficient = 5;
     const maxPower = 3;
-  
+
     const getRandomNumber = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
-  
+
     const getCoefficient = () => {
       if (!options.numbers) return '';
       const coeff = getRandomNumber(-maxCoefficient, maxCoefficient);
@@ -217,40 +230,35 @@ const VariantModal: React.FC<VariantModalProps> = ({
       if (coeff === -1) return '-';
       return coeff.toString();
     };
-  
+
     const getPower = () => (options.numbers ? getRandomNumber(2, maxPower) : '');
-  
-    // Проверка на тривиальность для двух выражений
+
     const isTrivialPair = (left: string, right: string, operation: string): boolean => {
-      if (left === right) return true; // Полное совпадение
+      if (left === right) return true;
       const leftBase = left.replace(/^-?\d*\\?/, '').replace(/\(.*\)/, '').replace(/\^{[^}]+}/, '');
       const rightBase = right.replace(/^-?\d*\\?/, '').replace(/\(.*\)/, '').replace(/\^{[^}]+}/, '');
       return leftBase === rightBase && (operation === '+' || operation === '-' || operation === '*');
     };
-  
-    // Подсчёт количества x (x-атомов)
+
     const calculateXCount = (expr: string): number => {
-      const xCount = (expr.match(/x/g) || []).length;
-      return xCount;
+      return (expr.match(/x/g) || []).length;
     };
-  
-    // Подсчёт количества x и проверка на избыточные повторы
+
     const analyzeExpression = (expr: string): { xCount: number; isTrivial: boolean } => {
       const xCount = calculateXCount(expr);
-      const parts = expr.split(/\s*[\+\-\*\/]\s*/).filter(Boolean); // Разделяем по операциям
+      const parts = expr.split(/\s*[\+\-\*\/]\s*/).filter(Boolean);
       const bases = parts.map(part => part.replace(/^-?\d*\\?/, '').replace(/\(.*\)/, '').replace(/\^{[^}]+}/, ''));
       const uniqueBases = new Set(bases);
-      
+
       const isTrivial = uniqueBases.size < parts.length / 2;
       return { xCount, isTrivial };
     };
-  
-    // Генерация базового выражения с одним x
+
     const generateBase = (): string => {
       const func = basicFunctions[Math.floor(Math.random() * basicFunctions.length)];
       const coefficient = getCoefficient();
       let expr = '';
-  
+
       if (func === 'x') {
         const power = getPower();
         expr = `${coefficient}x${power ? `^{${power}}` : ''}`;
@@ -259,28 +267,27 @@ const VariantModal: React.FC<VariantModalProps> = ({
       } else {
         expr = `${coefficient}${func}(x)`;
       }
-  
+
       return expr || 'x';
     };
-  
-    // Основная генерация
+
     const generate = (targetComplexity: number): string => {
       if (targetComplexity <= 1) {
         return generateBase();
       }
-  
+
       const availableOptions = [];
       if (options.recursive) availableOptions.push('recursive');
       if (options.linear) availableOptions.push('linear');
       if (!availableOptions.length) availableOptions.push('linear');
-  
+
       const choice = availableOptions[Math.floor(Math.random() * availableOptions.length)];
-  
+
       if (choice === 'recursive') {
         const outerFunc = basicFunctions[Math.floor(Math.random() * basicFunctions.length)];
         const coefficient = getCoefficient();
         const innerExpr = generate(targetComplexity - 1);
-  
+
         if (outerFunc === '\\sqrt') {
           return `${coefficient}\\sqrt{(${innerExpr})^{2}}`;
         } else if (outerFunc === '\\ln') {
@@ -295,29 +302,29 @@ const VariantModal: React.FC<VariantModalProps> = ({
       } else {
         const parts: string[] = [];
         let remainingComplexity = targetComplexity;
-  
+
         while (remainingComplexity > 0) {
           const partComplexity = Math.min(remainingComplexity, Math.floor(Math.random() * remainingComplexity) + 1);
           parts.push(generate(partComplexity));
           remainingComplexity -= partComplexity;
         }
-  
+
         let expr = parts[0];
         for (let i = 1; i < parts.length; i++) {
           const operation = operations[Math.floor(Math.random() * operations.length)];
           let right = parts[i];
-  
+
           let attempts = 0;
           const maxAttempts = 10;
           while (isTrivialPair(expr, right, operation) && attempts < maxAttempts) {
-            right = generate(calculateXCount(parts[i])); // Перегенерируем с той же сложностью
+            right = generate(calculateXCount(parts[i]));
             attempts++;
           }
-  
+
           if (operation === '/') {
             right = `((${right})^{2} + 1)`;
           }
-  
+
           if (operation === '+' && right.startsWith('-')) {
             expr = `${expr} - ${right.substring(1)}`;
           } else if (operation === '-' && right.startsWith('-')) {
@@ -326,165 +333,262 @@ const VariantModal: React.FC<VariantModalProps> = ({
             expr = `${expr} ${operation} ${right}`;
           }
         }
-  
+
         return expr;
       }
     };
-  
+
     let result = generate(complexity);
     let attempts = 0;
     const maxAttempts = 50;
     let analysis = analyzeExpression(result);
-  
+
     while ((analysis.xCount !== complexity || analysis.isTrivial) && attempts < maxAttempts) {
       result = generate(complexity);
       analysis = analyzeExpression(result);
       attempts++;
     }
-  
+
     if (attempts >= maxAttempts) {
       console.warn(`Не удалось сгенерировать нетривиальное выражение с точным количеством x = ${complexity}, возвращаем последнее: ${result}`);
     }
-  
+
     return result;
   };
-  const countDuplicates = (expressions) => {
-    const expressionCount = {};
-    expressions.forEach(expr => {
-      expressionCount[expr] = (expressionCount[expr] || 0) + 1;
-    });
-    return Object.values(expressionCount).reduce((sum, count) => sum + (count > 1 ? count - 1 : 0), 0);
-  };
-  
-  // Функция для вычисления среднего числа дубликатов по 10 прогонам
-  const getAverageDuplicates = (N, C, option) => {
-    const runs = 10;
-    let totalDuplicates = 0;
-  
-    for (let i = 0; i < runs; i++) {
-      const expressions = Array.from({ length: N }, () => generateComplexLatex(C, option));
-      totalDuplicates += countDuplicates(expressions);
-    }
-  
-    return (totalDuplicates / runs).toFixed(2); // Среднее с двумя знаками после запятой
-  };
-  
-  // Компактный перебор и вывод с усреднением
-  const testVariantsCompactWithAverage = () => {
-    const Ns = [5, 10, 50];
-    const Cs = [1, 2, 3, 4, 5];
-    const optionCombinations = [
-      { recursive: false, linear: false, numbers: false, name: 'Без опций' },
-      { recursive: false, linear: false, numbers: true, name: 'Коэф.' },
-      { recursive: true, linear: false, numbers: false, name: 'Рек.' },
-      { recursive: false, linear: true, numbers: false, name: 'Лин.' },
-      { recursive: true, linear: false, numbers: true, name: 'Рек. + Коэф.' },
-      { recursive: false, linear: true, numbers: true, name: 'Лин. + Коэф.' },
-      { recursive: true, linear: true, numbers: false, name: 'Рек. + Лин.' },
-      { recursive: true, linear: true, numbers: true, name: 'Все' },
-    ];
-  
-    // Заголовок
-    let header = 'Активные опции';
-    Ns.forEach(N => {
-      Cs.forEach(C => {
-        header += `\tN=${N} C=${C}`;
-      });
-    });
-    console.log(header);
-  
-    // Данные с усреднением
-    optionCombinations.forEach(option => {
-      let row = option.name;
-      Ns.forEach(N => {
-        Cs.forEach(C => {
-          const avgDuplicates = getAverageDuplicates(N, C, option);
-          row += `\t${avgDuplicates}`;
-        });
-      });
-      console.log(row);
-    });
-  };
-  
-  // Запуск теста
 
-  const downloadPDF = async () => {
-    if (!contentRef.current) return;
-
-    const pdf = new jsPDF('p', 'mm', 'a4');
-    const content = contentRef.current;
-
-    const scale = 2;
-    const pageWidth = pdf.internal.pageSize.getWidth() - 20;
-    const pageHeight = pdf.internal.pageSize.getHeight() - 20;
-
-    let yOffset = 10;
-
-    for (let i = 0; i < generatedVariants.length; i++) {
-      const variant = generatedVariants[i];
-      const taskElement = content.children[i] as HTMLElement;
-
-      const canvas = await html2canvas(taskElement, { scale });
-      const imgData = canvas.toDataURL('image/png');
-
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      if (yOffset + imgHeight > pageHeight) {
-        pdf.addPage();
-        yOffset = 10;
-      }
-
-      pdf.addImage(imgData, 'PNG', 10, yOffset, imgWidth, imgHeight);
-      yOffset += imgHeight + 10;
+  const downloadPDF = () => {
+    if (!generatedVariants.length) {
+      message.error('Нет сгенерированных вариантов для экспорта');
+      return;
     }
 
-    pdf.save('variants.pdf');
-  };
+    console.log('Генерация PDF с использованием встроенного шрифта Roboto');
 
-  const downloadWord = () => {
-    const paragraphs = generatedVariants.map((variant, index) => {
+    const cardWidth = 300; // mm, ширина карточки (2 x 97 + 2 x 7 = 208 mm, близко к A4 210 mm)
+    const margin = 7; // mm, уменьшено для увеличения ширины карточек
+    const columnGap = 4; // mm, зазор между столбцами для визуального разделения
+
+    // Создаём карточки
+    const content = generatedVariants.map((variant, index) => {
       const sortedParams = Object.entries(variant.params || {})
         .sort(([keyA], [keyB]) => {
           const paramA = themeParams.find((p) => p.name === keyA);
           const paramB = themeParams.find((p) => p.name === keyB);
-
           if (paramA?.type === 'latex' && paramB?.type !== 'latex') return -1;
           if (paramA?.type !== 'latex' && paramB?.type === 'latex') return 1;
           return keyA.localeCompare(keyB);
-        });
-
-      const taskParams = sortedParams
-        .map(([key, value]) => `${key} = ${value}`)
-        .join('\n');
+        })
+        .filter(([key]) => key !== 'name' && key !== 'theme_id')
+        .map(([key, value]) => ({
+          text: `${key} = ${value}`,
+          font: 'Roboto',
+          italics: themeParams.find((p) => p.name === key)?.type === 'latex', // Курсив для LaTeX
+          fontSize: 10, // Увеличено для читаемости
+          margin: [0, 0, 0, 4], // Увеличено для компактности
+          break: true, // Перенос строк для длинных выражений
+        }));
 
       const subtasks = variant.subtasks
         .map((subtask, subtaskIndex) => {
           const method = methods.find((m) => m.id === subtask.method_id);
-          return `${subtaskIndex + 1}) ${method ? method.description : 'Метод не найден'}{' '}
-            ${subtask.params ? `(${JSON.stringify(subtask.params)})` : ''}`;
-        })
-        .join('\n');
+          return {
+            text: `${subtaskIndex + 1}) ${method ? method.description : 'Метод не найден'}`,
+            font: 'Roboto',
+            fontSize: 10, // Увеличено для читаемости
+            margin: [0, 0, 0, 4], // Увеличено для компактности
+            break: true, // Перенос строк для длинных описаний
+          };
+        });
 
-      return new Paragraph({
-        children: [
-          new TextRun({
-            text: `Вариант ${index + 1}:`,
-            bold: true,
-          }),
-          new TextRun({
-            text: `\n${variant.description}\n${taskParams}\n${subtasks}`,
-            break: 1,
+      return {
+        stack: [
+          { text: `Вариант ${index + 1}`, style: 'header' },
+          { text: variant.description, style: 'body', break: true },
+          ...sortedParams,
+          ...subtasks,
+        ],
+        width: cardWidth,
+        style: 'card',
+        unbreakable: true, // Предотвращаем разрыв карточки
+      };
+    });
+
+    // Создаём двухколоночный макет
+    const rows = [];
+    for (let i = 0; i < content.length; i += 2) {
+      const row = {
+        columns: [
+          content[i],
+          i + 1 < content.length ? content[i + 1] : { text: '', width: cardWidth },
+        ],
+        columnGap: columnGap, // Зазор между столбцами
+        margin: [0, 0, 0, 4], // Уменьшено для компактности
+      };
+      rows.push(row);
+      console.log(
+        `PDF: Создана строка ${i / 2 + 1} с карточками ${i + 1} и ${
+          i + 2
+        }, ширина столбцов: ${cardWidth}mm, зазор: ${columnGap}mm`
+      );
+    }
+
+    const documentDefinition = {
+      pageSize: 'A4',
+      pageMargins: [margin, margin, margin, margin],
+      defaultStyle: {
+        font: 'Roboto',
+        fontSize: 10, // Увеличено для читаемости
+      },
+      styles: {
+        header: {
+          fontSize: 12, // Чуть больше для заголовков
+          bold: true,
+          margin: [0, 0, 0, 4],
+        },
+        body: {
+          fontSize: 10,
+          margin: [0, 0, 0, 4],
+        },
+        card: {
+          margin: [5, 5, 5, 5], // Увеличено для визуального сходства с Word
+          padding: 5, // Увеличено для простора внутри карточки
+          border: {
+            left: { width: 0.5, color: '#000000' }, // Чёткие границы
+            right: { width: 0.5, color: '#000000' },
+            top: { width: 0.5, color: '#000000' },
+            bottom: { width: 0.5, color: '#000000' },
+          },
+        },
+      },
+      content: rows,
+    };
+
+    pdfMake.createPdf(documentDefinition).download('variants.pdf');
+  };
+
+  const downloadWord = () => {
+    if (!generatedVariants.length) {
+      message.error('Нет сгенерированных вариантов для экспорта');
+      return;
+    }
+
+    console.log('Генерация Word с количеством вариантов:', generatedVariants.length);
+
+    const cardWidth = 97 * 56.7; // Convert mm to points (1 mm ≈ 56.7 points)
+    const margin = 8 * 56.7; // Convert mm to points, уменьшено
+
+    const createCard = (variant: Task, index: number) => {
+      const sortedParams = Object.entries(variant.params || {})
+        .sort(([keyA], [keyB]) => {
+          const paramA = themeParams.find((p) => p.name === keyA);
+          const paramB = themeParams.find((p) => p.name === keyB);
+          if (paramA?.type === 'latex' && paramB?.type !== 'latex') return -1;
+          if (paramA?.type !== 'latex' && paramB?.type === 'latex') return 1;
+          return keyA.localeCompare(keyB);
+        })
+        .filter(([key]) => key !== 'name' && key !== 'theme_id')
+        .map(([key, value]) => new Paragraph({
+          children: [new TextRun({
+            text: `${key} = ${value}`,
+            font: themeParams.find((p) => p.name === key)?.type === 'latex' ? 'Cambria Math' : undefined,
+            italics: themeParams.find((p) => p.name === key)?.type === 'latex',
+            size: 18, // 9pt
+          })],
+          spacing: { after: 30 }, // Уменьшено
+        }));
+
+      const subtasks = variant.subtasks.map((subtask, subtaskIndex) => {
+        const method = methods.find((m) => m.id === subtask.method_id);
+        return new Paragraph({
+          children: [new TextRun({
+            text: `${subtaskIndex + 1}) ${method ? method.description : 'Метод не найден'}`,
+            size: 18, // 9pt
+          })],
+          spacing: { after: 30 }, // Уменьшено
+        });
+      });
+
+      return new Table({
+        width: { size: cardWidth, type: WidthType.DXA },
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({
+                borders: {
+                  top: { style: BorderStyle.SINGLE, size: 1 },
+                  bottom: { style: BorderStyle.SINGLE, size: 1 },
+                  left: { style: BorderStyle.SINGLE, size: 1 },
+                  right: { style: BorderStyle.SINGLE, size: 1 },
+                },
+                margins: { top: 30, bottom: 30, left: 30, right: 30 }, // Уменьшено
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: `Вариант ${index}`, bold: true, size: 22 })], // 11pt
+                    spacing: { after: 30 },
+                  }),
+                  new Paragraph({
+                    children: [new TextRun({ text: variant.description, size: 18 })], // 9pt
+                    spacing: { after: 30 },
+                  }),
+                  ...sortedParams,
+                  ...subtasks,
+                ],
+              }),
+            ],
           }),
         ],
       });
-    });
+    };
+
+    const rows = [];
+    for (let i = 0; i < generatedVariants.length; i += 2) {
+      const row = new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({
+                width: { size: 50, type: WidthType.PERCENTAGE },
+                borders: {
+                  top: { style: BorderStyle.NONE },
+                  bottom: { style: BorderStyle.NONE },
+                  left: { style: BorderStyle.NONE },
+                  right: { style: BorderStyle.NONE },
+                },
+                children: [createCard(generatedVariants[i], i + 1)],
+              }),
+              new TableCell({
+                width: { size: 50, type: WidthType.PERCENTAGE },
+                borders: {
+                  top: { style: BorderStyle.NONE },
+                  bottom: { style: BorderStyle.NONE },
+                  left: { style: BorderStyle.NONE },
+                  right: { style: BorderStyle.NONE },
+                },
+                children: i + 1 < generatedVariants.length ? [createCard(generatedVariants[i + 1], i + 2)] : [],
+              }),
+            ],
+          }),
+        ],
+      });
+      rows.push(row);
+      console.log(`Word: Создана строка ${i / 2 + 1} с карточками ${i + 1} и ${i + 2}`);
+    }
 
     const doc = new Document({
       sections: [
         {
-          properties: {},
-          children: paragraphs,
+          properties: {
+            page: {
+              margin: {
+                top: margin,
+                right: margin,
+                bottom: margin,
+                left: margin,
+              },
+            },
+          },
+          children: rows,
         },
       ],
     });
@@ -598,13 +702,13 @@ const VariantModal: React.FC<VariantModalProps> = ({
                               checked={latexOptions[paramKey]?.linear}
                               onChange={(e) => updateLatexOptions(paramKey, 'linear', e.target.checked)}
                             >
-                              Линейный подход
+                              Линейные цепочки
                             </Checkbox>
                             <Checkbox
                               checked={latexOptions[paramKey]?.numbers}
                               onChange={(e) => updateLatexOptions(paramKey, 'numbers', e.target.checked)}
                             >
-                              Использовать числа
+                              Коэффициенты
                             </Checkbox>
                           </div>
                         </>
@@ -657,7 +761,6 @@ const VariantModal: React.FC<VariantModalProps> = ({
                   .sort(([keyA], [keyB]) => {
                     const paramA = themeParams.find((p) => p.name === keyA);
                     const paramB = themeParams.find((p) => p.name === keyB);
-
                     if (paramA?.type === 'latex' && paramB?.type !== 'latex') return -1;
                     if (paramA?.type !== 'latex' && paramB?.type === 'latex') return 1;
                     return keyA.localeCompare(keyB);
@@ -682,8 +785,7 @@ const VariantModal: React.FC<VariantModalProps> = ({
               return (
                 <div key={subtaskIndex} style={{ marginTop: '12px' }}>
                   <Text>
-                    {subtaskIndex + 1}) {method ? method.description : 'Метод не найден'}{' '}
-                    {subtask.params && `(${JSON.stringify(subtask.params)})`}
+                    {subtaskIndex + 1}) {method ? method.description : 'Метод не найден'}
                   </Text>
                 </div>
               );
