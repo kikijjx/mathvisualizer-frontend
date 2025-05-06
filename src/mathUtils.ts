@@ -84,7 +84,6 @@ export const calculateNForPrecision = (
   precision: number,
   method: string
 ): number => {
-  // Находим максимум производной на отрезке [a, b]
   const numPoints = 100;
   let maxDerivative = 0;
   for (let i = 0; i <= numPoints; i++) {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Card, Button, Typography } from 'antd';
+import { Card, Button, Typography, Collapse } from 'antd';
 import IntegrationInputs from './IntegrationInputs';
 import IntegrationChart from './IntegrationChart';
 import IntegrationTable from './IntegrationTable';
@@ -15,6 +15,7 @@ import {
 } from '../mathUtils';
 
 const { Paragraph } = Typography;
+const { Panel } = Collapse;
 
 const TrapezoidalIntegration: React.FC = () => {
   const [latex, setLatex] = useState<string>('sin(x)');
@@ -37,7 +38,6 @@ const TrapezoidalIntegration: React.FC = () => {
     const exact = calculateExactIntegral(a, b);
     setExactIntegral(exact);
 
-    // Определяем число разбиений в зависимости от режима
     let currentN = n;
     if (mode === 'precision') {
       currentN = calculateNForPrecision(func, a, b, precision, 'Трапеций');
@@ -45,7 +45,6 @@ const TrapezoidalIntegration: React.FC = () => {
     }
     const step = (b - a) / currentN;
 
-    // Генерация данных для графика функции
     const numPoints = 500;
     const newFunctionData = [];
     for (let i = 0; i <= numPoints; i++) {
@@ -55,7 +54,6 @@ const TrapezoidalIntegration: React.FC = () => {
     }
     setFunctionData(newFunctionData);
 
-    // Генерация данных для трапеций
     const newTrapezoidData = [];
     for (let i = 0; i <= currentN; i++) {
       const x = a + i * step;
@@ -64,7 +62,6 @@ const TrapezoidalIntegration: React.FC = () => {
     }
     setTrapezoidData(newTrapezoidData);
 
-    // Вычисление результатов для всех методов
     const methods = [
       { name: 'Левых прямоугольников', func: leftRectangles },
       { name: 'Правых прямоугольников', func: rightRectangles },
@@ -98,80 +95,130 @@ const TrapezoidalIntegration: React.FC = () => {
   };
 
   return (
-    <Card title="Метод трапеций" style={{ width: '100%', maxWidth: '800px', margin: '0 auto' }}>
-      <Typography style={{ textAlign: 'left', padding: '0 20px' }}>
-        <Paragraph>
-          Пусть требуется вычислить определённый интеграл:
-          <MathJax>{`\\[ I = \\int_{a}^{b} f(x) \\, dx \\]`}</MathJax>
-          Определённый интеграл представляет собой площадь под кривой, ограниченной подынтегральной функцией <MathJax inline dynamic>\( f(x) \)</MathJax>.
-        </Paragraph>
-        <Paragraph>
-          Для вычисления определённого интеграла площадь под кривой аппроксимируется трапециями. Площадь каждой трапеции можно определить как:
-          <MathJax>{`\\[ S_i = \\frac{f(x_i) + f(x_{i+1})}{2} \\cdot h \\]`}</MathJax>
-          где:
-          <ul>
-            <li>
-              <span> <MathJax inline dynamic>{`\\( S_i \\)`}</MathJax> — площадь <MathJax inline dynamic>{`\\( i \\)`}</MathJax>-й трапеции </span>
-            </li>
-            <li>
-              <span> <MathJax inline dynamic>{`\\( f(x_i) \\)`}</MathJax> и <MathJax inline dynamic>{`\\( f(x_{i+1}) \\)`}</MathJax> — значения функции на концах отрезка </span>
-            </li>
-            <li>
-              <span> <MathJax inline dynamic>{`\\( h = \\frac{b - a}{n} \\)`}</MathJax> — шаг разбиения (высота трапеции) </span>
-            </li>
-            <li>
-              <span> <MathJax inline dynamic>{`\\( n \\)`}</MathJax> — количество разбиений </span>
-            </li>
-          </ul>
-        </Paragraph>
-        <Paragraph>
-          Общая площадь под кривой аппроксимируется суммой площадей всех трапеций:
-          <MathJax>{`\\[ I \\approx \\sum_{i=0}^{n-1} S_i = \\frac{h}{2} \\left( f(x_0) + 2f(x_1) + 2f(x_2) + \\dots + 2f(x_{n-1}) + f(x_n) \\right) \\]`}</MathJax>
-        </Paragraph>
-        <Paragraph>
-          <span>Высота трапеций <MathJax inline dynamic>\( h \)</MathJax> выбирается достаточно малой, чтобы на каждом отрезке <MathJax inline dynamic>\( [x_i, x_i+1] \)</MathJax> функцию <MathJax inline dynamic>\( f(x) \)</MathJax> можно было заменить линейной.</span>
-        </Paragraph>
-      </Typography>
+    <>
+      <style>
+        {`
+          .integration-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 20px;
+          }
+          .inputs-block {
+            flex: 1;
+            min-width: 300px;
+            max-width: 400px;
+          }
+          .chart-block {
+            flex: 2;
+            min-width: 300px;
+            max-width: 800px;
+          }
+          @media (max-width: 768px) {
+            .integration-container {
+              flex-direction: column;
+            }
+            .inputs-block, .chart-block {
+              max-width: 100%;
+            }
+          }
+        `}
+      </style>
+      <Card 
+        title="Метод трапеций" 
+        style={{ 
+          width: '100%', 
+          maxWidth: 1200, 
+          margin: '20px auto', 
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+          borderRadius: '8px'
+        }}
+      >
+        <Collapse defaultActiveKey={[]} style={{ marginBottom: '20px' }}>
+          <Panel header="Теория" key="1">
+            <Typography style={{ textAlign: 'left', padding: '0 20px' }}>
+              <Paragraph>
+                Пусть требуется вычислить определённый интеграл:
+                <MathJax>{`\\[ I = \\int_{a}^{b} f(x) \\, dx \\]`}</MathJax>
+                Определённый интеграл представляет собой площадь под кривой, ограниченной подынтегральной функцией <MathJax inline dynamic>\( f(x) \)</MathJax>.
+              </Paragraph>
+              <Paragraph>
+                Для вычисления определённого интеграла площадь под кривой аппроксимируется трапециями. Площадь каждой трапеции можно определить как:
+                <MathJax>{`\\[ S_i = \\frac{f(x_i) + f(x_{i+1})}{2} \\cdot h \\]`}</MathJax>
+                где:
+                <ul>
+                  <li><MathJax inline dynamic>{`\\( S_i \\)`}</MathJax> — площадь <MathJax inline dynamic>{`\\( i \\)`}</MathJax>-й трапеции</li>
+                  <li><MathJax inline dynamic>{`\\( f(x_i) \\)`}</MathJax> и <MathJax inline dynamic>{`\\( f(x_{i+1}) \\)`}</MathJax> — значения функции на концах отрезка</li>
+                  <li><MathJax inline dynamic>{`\\( h = \\frac{b - a}{n} \\)`}</MathJax> — шаг разбиения (высота трапеции)</li>
+                  <li><MathJax inline dynamic>{`\\( n \\)`}</MathJax> — количество разбиений</li>
+                </ul>
+              </Paragraph>
+              <Paragraph>
+                Общая площадь под кривой аппроксимируется суммой площадей всех трапеций:
+                <MathJax>{`\\[ I \\approx \\sum_{i=0}^{n-1} S_i = \\frac{h}{2} \\left( f(x_0) + 2f(x_1) + 2f(x_2) + \\dots + 2f(x_{n-1}) + f(x_n) \\right) \\]`}</MathJax>
+              </Paragraph>
+              <Paragraph>
+                <span>Высота трапеций <MathJax inline dynamic>\( h \)</MathJax> выбирается достаточно малой, чтобы на каждом отрезке <MathJax inline dynamic>\( [x_i, x_i+1] \)</MathJax> функцию <MathJax inline dynamic>\( f(x) \)</MathJax> можно было заменить линейной.</span>
+              </Paragraph>
+            </Typography>
+          </Panel>
+        </Collapse>
 
-      <IntegrationInputs
-        latex={latex}
-        setLatex={setLatex}
-        a={a}
-        setA={setA}
-        b={b}
-        setB={setB}
-        n={n}
-        setN={setN}
-        precision={precision}
-        setPrecision={setPrecision}
-        mode={mode}
-        setMode={setMode}
-      />
+        <div className="integration-container">
+          <div className="inputs-block">
+            <IntegrationInputs
+              latex={latex}
+              setLatex={setLatex}
+              a={a}
+              setA={setA}
+              b={b}
+              setB={setB}
+              n={n}
+              setN={setN}
+              precision={precision}
+              setPrecision={setPrecision}
+              mode={mode}
+              setMode={setMode}
+            />
+            <Button 
+              onClick={integrate} 
+              type="primary" 
+              style={{ 
+                marginTop: '16px', 
+                width: '100%', 
+                padding: '8px 0',
+                borderRadius: '6px'
+              }}
+            >
+              Интегрировать
+            </Button>
+            {exactIntegral !== null && result !== null && (
+              <Typography style={{ marginTop: '16px', textAlign: 'center' }}>
+                <Paragraph>
+                  <MathJax inline dynamic>{`\\( I_{\\text{точное}} = ${exactIntegral.toFixed(6)} \\)`}</MathJax>
+                </Paragraph>
+                <Paragraph>
+                  <MathJax inline dynamic>{`\\( I_{\\text{приближённое}} = ${result.toFixed(6)} \\)`}</MathJax>
+                </Paragraph>
+              </Typography>
+            )}
+          </div>
+          <div className="chart-block">
+            <IntegrationChart
+              functionData={functionData}
+              segmentData={trapezoidData}
+              method="трапеций"
+            />
+          </div>
+        </div>
 
-      <Button onClick={integrate} style={{ marginTop: '10px' }}>
-        Интегрировать
-      </Button>
-
-      <IntegrationChart
-        functionData={functionData}
-        segmentData={trapezoidData}
-        result={result}
-      />
-
-      {exactIntegral !== null && (
-        <Typography style={{ marginTop: '20px' }}>
-          <Paragraph>
-            Точное значение интеграла: <MathJax inline dynamic>{`\\( I_{\\text{точное}} = ${exactIntegral.toFixed(6)} \\)`}</MathJax>
-          </Paragraph>
-        </Typography>
-      )}
-
-      <IntegrationTable
-        data={tableData}
-        highlightedMethod="Трапеций"
-        showN={mode === 'precision'}
-      />
-    </Card>
+        <IntegrationTable
+          data={tableData}
+          highlightedMethod="Трапеций"
+          showN={mode === 'precision'}
+        />
+      </Card>
+    </>
   );
 };
 

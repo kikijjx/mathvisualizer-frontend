@@ -31,7 +31,7 @@ const DiffurChart: React.FC<DiffurChartProps> = ({ eulerData, exactData }) => {
   const eulerDataset = {
     label: 'Метод Эйлера',
     data: eulerData.map((point) => ({ x: point.x, y: point.y })),
-    borderColor: 'rgba(75, 192, 192, 1)',
+    borderColor: 'rgba(255, 99, 132, 1)',
     fill: false,
     pointRadius: 3,
   };
@@ -41,7 +41,7 @@ const DiffurChart: React.FC<DiffurChartProps> = ({ eulerData, exactData }) => {
     ? {
         label: 'Точное решение',
         data: exactData.map((point) => ({ x: point.x, y: point.y })),
-        borderColor: 'rgba(255, 99, 132, 1)',
+        borderColor: 'rgba(75, 192, 192, 1)',
         fill: false,
         pointRadius: 0,
       }

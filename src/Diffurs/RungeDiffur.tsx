@@ -48,7 +48,7 @@ const RungeDiffur: React.FC = () => {
   };
 
   return (
-    <Card title="Метод Рунге-Кутты 4-го порядка" style={{ width: '100%', maxWidth: '800px', margin: '0 auto' }}>
+    <Card title="Метод Рунге-Кутты 4-го порядка" style={{ width: '80%', margin: '0 auto' }}>
       {/* Теория */}
       <Typography style={{ textAlign: 'left', padding: '0 20px' }}>
         <Paragraph>

@@ -1,16 +1,18 @@
+
 import React, { useRef, useEffect, useState } from 'react';
-import { Button, Modal, Form, InputNumber, Checkbox, Slider, Typography, Divider, message } from 'antd';
+import { Button, Modal, Form, InputNumber, Checkbox, Slider, Typography, Divider, message, Input } from 'antd';
 import { MathJax } from 'better-react-mathjax';
 import { Task, getThemeParams } from '../api';
 import pdfMake from 'pdfmake/build/pdfmake';
 import * as pdfFonts from 'pdfmake/build/vfs_fonts';
 import { Document, Packer, Paragraph, TextRun, Table, TableCell, TableRow, WidthType, BorderStyle } from 'docx';
 import { saveAs } from 'file-saver';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 
 const { Text } = Typography;
 
 pdfMake.vfs = pdfFonts.vfs;
-// Не задаём pdfMake.fonts, используем встроенные шрифты Roboto из vfs_fonts
 
 interface ParamSettings {
   min?: number;
@@ -63,6 +65,8 @@ const VariantModal: React.FC<VariantModalProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const [latexOptions, setLatexOptions] = useState<Record<string, LatexOptions>>({});
   const [startTime, setStartTime] = useState<number | null>(null);
+  const [editingVariant, setEditingVariant] = useState<Task | null>(null);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (task && !themeParams.length) {
@@ -112,10 +116,75 @@ const VariantModal: React.FC<VariantModalProps> = ({
     setLatexOptions(options);
   };
 
+  const validateParamBounds = (): boolean => {
+    const aKey = themeParams.find((p) => p.name === 'a') ? `param_${themeParams.find((p) => p.name === 'a')!.id}` : null;
+    const bKey = themeParams.find((p) => p.name === 'b') ? `param_${themeParams.find((p) => p.name === 'b')!.id}` : null;
+
+    if (aKey && bKey && selectedParams[aKey] && selectedParams[bKey]) {
+      const aSettings = paramSettings[aKey];
+      const bSettings = paramSettings[bKey];
+
+      if (aSettings.max && bSettings.min && aSettings.max >= bSettings.min) {
+        message.error('Максимальное значение параметра a должно быть меньше минимального значения параметра b');
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const checkLatexValidity = (expr: string, aMin: number, aMax: number, bMin: number, bMax: number): boolean => {
+    try {
+      const testValues = [
+        aMin, aMax, bMin, bMax,
+        (aMin + aMax) / 2,
+        (bMin + bMax) / 2,
+      ];
+
+      for (const x of testValues) {
+        let evalExpr = expr
+          .replace(/\\sin/g, 'Math.sin')
+          .replace(/\\cos/g, 'Math.cos')
+          .replace(/\\tan/g, 'Math.tan')
+          .replace(/\\ln/g, 'Math.log')
+          .replace(/e\^{([^}]+)}/g, 'Math.exp($1)')
+          .replace(/x/g, x.toString())
+          .replace(/\^{([^}]+)}/g, '**($1)');
+
+        if (evalExpr.includes('/')) {
+          const parts = evalExpr.split('/');
+          for (let i = 1; i < parts.length; i++) {
+            const denominator = eval(parts[i]);
+            if (Math.abs(denominator) < 1e-10) {
+              console.warn(`LaTeX-выражение "${expr}" невалидно: деление на ноль при x = ${x}`);
+              return false;
+            }
+          }
+        }
+
+        const result = eval(evalExpr);
+        if (!isFinite(result)) {
+          console.warn(`LaTeX-выражение "${expr}" невалидно: бесконечное или неопределенное значение при x = ${x}`);
+          return false;
+        }
+      }
+      return true;
+    } catch (error) {
+      console.warn(`Ошибка проверки LaTeX-выражения "${expr}":`, error);
+      return false;
+    }
+  };
+
   const generateVariants = () => {
-    if (!task) return;
+    if (!task) {
+      message.error('Задача не выбрана');
+      return;
+    }
     if (numVariants < 1) {
       message.error('Количество вариантов должно быть больше 0');
+      return;
+    }
+
+    if (!validateParamBounds()) {
       return;
     }
 
@@ -129,6 +198,11 @@ const VariantModal: React.FC<VariantModalProps> = ({
     const latexExpressions = new Set<string>();
     const maxAttempts = numVariants * 10;
     let attempts = 0;
+
+    const aKey = themeParams.find((p) => p.name === 'a') ? `param_${themeParams.find((p) => p.name === 'a')!.id}` : null;
+    const bKey = themeParams.find((p) => p.name === 'b') ? `param_${themeParams.find((p) => p.name === 'b')!.id}` : null;
+    const aSettings = aKey && paramSettings[aKey] ? paramSettings[aKey] : { min: 1, max: 10 };
+    const bSettings = bKey && paramSettings[bKey] ? paramSettings[bKey] : { min: 1, max: 10 };
 
     variants.forEach((variant) => {
       if (variant.params) {
@@ -156,8 +230,12 @@ const VariantModal: React.FC<VariantModalProps> = ({
 
     while (latexExpressions.size < numVariants && attempts < maxAttempts && latexParamKeys.length > 0) {
       const paramKey = latexParamKeys[Math.floor(Math.random() * latexParamKeys.length)];
-      const newExpr = generateComplexLatex(paramSettings[paramKey]?.complexity || 1, latexOptions[paramKey]);
-      latexExpressions.add(newExpr);
+      let newExpr = generateComplexLatex(paramSettings[paramKey]?.complexity || 1, latexOptions[paramKey]);
+      if (checkLatexValidity(newExpr, aSettings.min || 1, aSettings.max || 10, bSettings.min || 1, bSettings.max || 10)) {
+        latexExpressions.add(newExpr);
+      } else {
+        console.log(`Пропущено выражение "${newExpr}" из-за невалидности в границах a=[${aSettings.min},${aSettings.max}], b=[${bSettings.min},${bSettings.max}]`);
+      }
       attempts++;
     }
 
@@ -174,8 +252,28 @@ const VariantModal: React.FC<VariantModalProps> = ({
 
     if (task.params) {
       newTask.params = { ...task.params };
+      const aKey = themeParams.find((p) => p.name === 'a') ? `param_${themeParams.find((p) => p.name === 'a')!.id}` : null;
+      const bKey = themeParams.find((p) => p.name === 'b') ? `param_${themeParams.find((p) => p.name === 'b')!.id}` : null;
+
+      let aValue: number | null = null;
+      if (aKey && selectedParams[aKey]) {
+        const settings = paramSettings[aKey] || { min: 1, max: 10 };
+        aValue = Math.floor(Math.random() * ((settings.max || 10) - (settings.min || 1) + 1)) + (settings.min || 1);
+        newTask.params['a'] = aValue;
+      }
+
+      if (bKey && selectedParams[bKey]) {
+        const settings = paramSettings[bKey] || { min: 1, max: 10 };
+        let bMin = settings.min || 1;
+        if (aValue !== null && aValue >= bMin) {
+          bMin = aValue + 1;
+        }
+        const bValue = Math.floor(Math.random() * ((settings.max || 10) - bMin + 1)) + bMin;
+        newTask.params['b'] = bValue;
+      }
+
       themeParams.forEach((param) => {
-        if (selectedParams[`param_${param.id}`]) {
+        if (param.name !== 'a' && param.name !== 'b' && selectedParams[`param_${param.id}`]) {
           newTask.params[param.name] = generateParamValue(param, `param_${param.id}`);
         }
       });
@@ -364,11 +462,10 @@ const VariantModal: React.FC<VariantModalProps> = ({
 
     console.log('Генерация PDF с использованием встроенного шрифта Roboto');
 
-    const cardWidth = 300; // mm, ширина карточки (2 x 97 + 2 x 7 = 208 mm, близко к A4 210 mm)
-    const margin = 7; // mm, уменьшено для увеличения ширины карточек
-    const columnGap = 4; // mm, зазор между столбцами для визуального разделения
+    const cardWidth = 300;
+    const margin = 7;
+    const columnGap = 4;
 
-    // Создаём карточки
     const content = generatedVariants.map((variant, index) => {
       const sortedParams = Object.entries(variant.params || {})
         .sort(([keyA], [keyB]) => {
@@ -382,10 +479,10 @@ const VariantModal: React.FC<VariantModalProps> = ({
         .map(([key, value]) => ({
           text: `${key} = ${value}`,
           font: 'Roboto',
-          italics: themeParams.find((p) => p.name === key)?.type === 'latex', // Курсив для LaTeX
-          fontSize: 10, // Увеличено для читаемости
-          margin: [0, 0, 0, 4], // Увеличено для компактности
-          break: true, // Перенос строк для длинных выражений
+          italics: themeParams.find((p) => p.name === key)?.type === 'latex',
+          fontSize: 10,
+          margin: [0, 0, 0, 4],
+          break: true,
         }));
 
       const subtasks = variant.subtasks
@@ -394,9 +491,9 @@ const VariantModal: React.FC<VariantModalProps> = ({
           return {
             text: `${subtaskIndex + 1}) ${method ? method.description : 'Метод не найден'}`,
             font: 'Roboto',
-            fontSize: 10, // Увеличено для читаемости
-            margin: [0, 0, 0, 4], // Увеличено для компактности
-            break: true, // Перенос строк для длинных описаний
+            fontSize: 10,
+            margin: [0, 0, 0, 4],
+            break: true,
           };
         });
 
@@ -409,11 +506,10 @@ const VariantModal: React.FC<VariantModalProps> = ({
         ],
         width: cardWidth,
         style: 'card',
-        unbreakable: true, // Предотвращаем разрыв карточки
+        unbreakable: true,
       };
     });
 
-    // Создаём двухколоночный макет
     const rows = [];
     for (let i = 0; i < content.length; i += 2) {
       const row = {
@@ -421,8 +517,8 @@ const VariantModal: React.FC<VariantModalProps> = ({
           content[i],
           i + 1 < content.length ? content[i + 1] : { text: '', width: cardWidth },
         ],
-        columnGap: columnGap, // Зазор между столбцами
-        margin: [0, 0, 0, 4], // Уменьшено для компактности
+        columnGap: columnGap,
+        margin: [0, 0, 0, 4],
       };
       rows.push(row);
       console.log(
@@ -437,11 +533,11 @@ const VariantModal: React.FC<VariantModalProps> = ({
       pageMargins: [margin, margin, margin, margin],
       defaultStyle: {
         font: 'Roboto',
-        fontSize: 10, // Увеличено для читаемости
+        fontSize: 10,
       },
       styles: {
         header: {
-          fontSize: 12, // Чуть больше для заголовков
+          fontSize: 12,
           bold: true,
           margin: [0, 0, 0, 4],
         },
@@ -450,10 +546,10 @@ const VariantModal: React.FC<VariantModalProps> = ({
           margin: [0, 0, 0, 4],
         },
         card: {
-          margin: [5, 5, 5, 5], // Увеличено для визуального сходства с Word
-          padding: 5, // Увеличено для простора внутри карточки
+          margin: [5, 5, 5, 5],
+          padding: 5,
           border: {
-            left: { width: 0.5, color: '#000000' }, // Чёткие границы
+            left: { width: 0.5, color: '#000000' },
             right: { width: 0.5, color: '#000000' },
             top: { width: 0.5, color: '#000000' },
             bottom: { width: 0.5, color: '#000000' },
@@ -474,8 +570,8 @@ const VariantModal: React.FC<VariantModalProps> = ({
 
     console.log('Генерация Word с количеством вариантов:', generatedVariants.length);
 
-    const cardWidth = 97 * 56.7; // Convert mm to points (1 mm ≈ 56.7 points)
-    const margin = 8 * 56.7; // Convert mm to points, уменьшено
+    const cardWidth = 97 * 56.7;
+    const margin = 8 * 56.7;
 
     const createCard = (variant: Task, index: number) => {
       const sortedParams = Object.entries(variant.params || {})
@@ -492,9 +588,9 @@ const VariantModal: React.FC<VariantModalProps> = ({
             text: `${key} = ${value}`,
             font: themeParams.find((p) => p.name === key)?.type === 'latex' ? 'Cambria Math' : undefined,
             italics: themeParams.find((p) => p.name === key)?.type === 'latex',
-            size: 18, // 9pt
+            size: 18,
           })],
-          spacing: { after: 30 }, // Уменьшено
+          spacing: { after: 30 },
         }));
 
       const subtasks = variant.subtasks.map((subtask, subtaskIndex) => {
@@ -502,9 +598,9 @@ const VariantModal: React.FC<VariantModalProps> = ({
         return new Paragraph({
           children: [new TextRun({
             text: `${subtaskIndex + 1}) ${method ? method.description : 'Метод не найден'}`,
-            size: 18, // 9pt
+            size: 18,
           })],
-          spacing: { after: 30 }, // Уменьшено
+          spacing: { after: 30 },
         });
       });
 
@@ -520,14 +616,14 @@ const VariantModal: React.FC<VariantModalProps> = ({
                   left: { style: BorderStyle.SINGLE, size: 1 },
                   right: { style: BorderStyle.SINGLE, size: 1 },
                 },
-                margins: { top: 30, bottom: 30, left: 30, right: 30 }, // Уменьшено
+                margins: { top: 30, bottom: 30, left: 30, right: 30 },
                 children: [
                   new Paragraph({
-                    children: [new TextRun({ text: `Вариант ${index}`, bold: true, size: 22 })], // 11pt
+                    children: [new TextRun({ text: `Вариант ${index}`, bold: true, size: 22 })],
                     spacing: { after: 30 },
                   }),
                   new Paragraph({
-                    children: [new TextRun({ text: variant.description, size: 18 })], // 9pt
+                    children: [new TextRun({ text: variant.description, size: 18 })],
                     spacing: { after: 30 },
                   }),
                   ...sortedParams,
@@ -599,9 +695,17 @@ const VariantModal: React.FC<VariantModalProps> = ({
   };
 
   const updateParamSettings = (paramKey: string, settings: ParamSettings) => {
+    const currentSettings = paramSettings[paramKey] || {};
+    const newSettings = { ...currentSettings, ...settings };
+
+    if (newSettings.min !== undefined && newSettings.max !== undefined && newSettings.max < newSettings.min) {
+      message.error('Максимальное значение не может быть меньше минимального');
+      return;
+    }
+
     setParamSettings((prev) => ({
       ...prev,
-      [paramKey]: settings,
+      [paramKey]: newSettings,
     }));
   };
 
@@ -613,6 +717,39 @@ const VariantModal: React.FC<VariantModalProps> = ({
         [option]: value,
       },
     }));
+  };
+
+  const startEditing = (variant: Task, index: number) => {
+    setEditingVariant({ ...variant });
+    setEditingIndex(index);
+  };
+
+  const saveEditing = () => {
+    if (editingVariant && editingIndex !== null) {
+      setGeneratedVariants((prev) =>
+        prev.map((v, i) => (i === editingIndex ? { ...editingVariant } : v))
+      );
+      setEditingVariant(null);
+      setEditingIndex(null);
+      message.success('Вариант успешно отредактирован');
+    }
+  };
+
+  const cancelEditing = () => {
+    setEditingVariant(null);
+    setEditingIndex(null);
+  };
+
+  const updateEditingParam = (paramName: string, value: string | number) => {
+    if (editingVariant) {
+      setEditingVariant({
+        ...editingVariant,
+        params: {
+          ...editingVariant.params,
+          [paramName]: value,
+        },
+      });
+    }
   };
 
   return (
@@ -754,6 +891,12 @@ const VariantModal: React.FC<VariantModalProps> = ({
         {generatedVariants.map((variant, index) => (
           <div key={variant.id} style={{ marginBottom: '24px' }}>
             <Text strong>Вариант {index + 1}</Text>
+            <Button
+              style={{ marginLeft: '16px' }}
+              onClick={() => startEditing(variant, index)}
+            >
+              Редактировать
+            </Button>
             <MathJax>{variant.description}</MathJax>
             {variant.params && (
               <div>
@@ -794,6 +937,38 @@ const VariantModal: React.FC<VariantModalProps> = ({
           </div>
         ))}
       </div>
+
+      {editingVariant && editingIndex !== null && (
+        <Modal
+          title={`Редактирование варианта ${editingIndex + 1}`}
+          open={true}
+          onOk={saveEditing}
+          onCancel={cancelEditing}
+          okText="Сохранить"
+          cancelText="Отмена"
+        >
+          <Form layout="vertical">
+            {editingVariant.params &&
+              Object.entries(editingVariant.params)
+                .filter(([key]) => key !== 'name' && key !== 'theme_id')
+                .map(([key, value]) => (
+                  <Form.Item key={key} label={key}>
+                    {themeParams.find((p) => p.name === key)?.type === 'latex' ? (
+                      <Input
+                        value={value as string}
+                        onChange={(e) => updateEditingParam(key, e.target.value)}
+                      />
+                    ) : (
+                      <InputNumber
+                        value={value as number}
+                        onChange={(val) => updateEditingParam(key, val || 0)}
+                      />
+                    )}
+                  </Form.Item>
+                ))}
+          </Form>
+        </Modal>
+      )}
     </Modal>
   );
 };
