@@ -1,39 +1,47 @@
 import React, { useState } from 'react';
-import { Card, Button, Typography } from 'antd';
+import { Card, Button, Typography, Collapse } from 'antd';
 import DiffurInputs from './DiffurInputs';
 import DiffurChart from './DiffurChart';
 import { MathJax } from 'better-react-mathjax';
 import { replaceMathFunctions, rungeKutta4Method, calculateExactSolution, isIndependentOfY } from '../mathUtils';
 
 const { Paragraph } = Typography;
+const { Panel } = Collapse;
 
 const RungeDiffur: React.FC = () => {
   const [latex, setLatex] = useState<string>('sin(x)');
   const [x0, setX0] = useState<number>(0);
   const [y0, setY0] = useState<number>(1);
-  const [xEnd, setXEnd] = useState<number>(10);
-  const [h, setH] = useState<number>(0.5);
+  const [b, setB] = useState<number>(10);
+  const [n, setN] = useState<number>(20);
   const [rungeData, setRungeData] = useState<{ x: number; y: number }[]>([]);
   const [exactData, setExactData] = useState<{ x: number; y: number }[]>([]);
 
   const solve = () => {
     console.time('Runge-Kutta 4 Method Time');
 
-    // Обработка введенной функции
+    if (b <= x0) {
+      console.error('Ошибка: b должно быть больше x0');
+      return;
+    }
+    if (n <= 0) {
+      console.error('Ошибка: n должно быть положительным');
+      return;
+    }
+
+    const h = (b - x0) / n;
     const processedLatex = replaceMathFunctions(latex);
     const func = (x: number, y: number) => eval(processedLatex.replace(/x/g, `(${x})`).replace(/y/g, `(${y})`));
 
-    // Метод Рунге-Кутты 4-го порядка
-    const rungeResult = rungeKutta4Method(func, x0, y0, xEnd, h);
+    const rungeResult = rungeKutta4Method(func, x0, y0, b, h);
     setRungeData(rungeResult);
 
-    // Проверка зависимости от y и вычисление точного решения
     if (isIndependentOfY(func, x0, y0)) {
       console.log('Уравнение не зависит от y, вычисляем точное решение.');
-      const numPoints = 500;
+      const numPoints = 200;
       const exactResult = [];
       for (let i = 0; i <= numPoints; i++) {
-        const x = x0 + (i / numPoints) * (xEnd - x0);
+        const x = x0 + (i / numPoints) * (b - x0);
         const y = calculateExactSolution(func, x0, y0, x);
         exactResult.push({ x, y });
       }
@@ -43,56 +51,113 @@ const RungeDiffur: React.FC = () => {
       setExactData([]);
     }
 
-    console.log(`Число шагов: ${(xEnd - x0) / h}`);
+    console.log(`Число разбиений: ${n}, Шаг h: ${h}`);
     console.timeEnd('Runge-Kutta 4 Method Time');
   };
 
   return (
-    <Card title="Метод Рунге-Кутты 4-го порядка" style={{ width: '80%', margin: '0 auto' }}>
-      {/* Теория */}
-      <Typography style={{ textAlign: 'left', padding: '0 20px' }}>
-        <Paragraph>
-          Для дифференциального уравнения первого порядка:
-          <MathJax>{`\\[ \\frac{dy}{dx} = f(x, y) \\]`}</MathJax>
-          с начальными условиями <MathJax inline dynamic>{`\\( y(x_0) = y_0 \\)`}</MathJax>, метод Рунге-Кутты 4-го порядка аппроксимирует решение, используя формулу:
-          <MathJax>{`\\[ k_1 = f(x_n, y_n), \\]`}</MathJax>
-          <MathJax>{`\\[ k_2 = f\\left(x_n + \\frac{h}{2}, y_n + \\frac{h}{2} \\cdot k_1\\right), \\]`}</MathJax>
-          <MathJax>{`\\[ k_3 = f\\left(x_n + \\frac{h}{2}, y_n + \\frac{h}{2} \\cdot k_2\\right), \\]`}</MathJax>
-          <MathJax>{`\\[ k_4 = f(x_n + h, y_n + h \\cdot k_3), \\]`}</MathJax>
-          <MathJax>{`\\[ y_{n+1} = y_n + \\frac{h}{6} \\cdot (k_1 + 2k_2 + 2k_3 + k_4) \\]`}</MathJax>
-          где <MathJax inline dynamic>{`\\( h \\)`}</MathJax> — шаг, <MathJax inline dynamic>{`\\( x_{n+1} = x_n + h \\)`}</MathJax>.
-        </Paragraph>
-        <Paragraph>
-          Если уравнение имеет вид <MathJax inline dynamic>{`\\( y' = f(x) \\)`}</MathJax> (не зависит от <MathJax inline dynamic>{`\\( y \\)`}</MathJax>), точное решение можно найти как:
-          <MathJax>{`\\[ y(x) = y_0 + \\int_{x_0}^{x} f(t) \\, dt \\]`}</MathJax>
-        </Paragraph>
-        <Paragraph>
-          Метод Рунге-Кутты 4-го порядка имеет погрешность <MathJax inline dynamic>{`\\( O(h^4) \\)`}</MathJax>, что делает его одним из самых точных одностадийных методов.
-        </Paragraph>
-      </Typography>
+    <>
+      <style>
+        {`
+          .integration-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            margin-bottom: 20px;
+          }
+          .inputs-block {
+            flex: 1;
+            min-width: 300px;
+            max-width: 400px;
+          }
+          .chart-block {
+            flex: 2;
+            min-width: 300px;
+            max-width: 800px;
+          }
+          @media (max-width: 768px) {
+            .integration-container {
+              flex-direction: column;
+            }
+            .inputs-block, .chart-block {
+              max-width: 100%;
+            }
+          }
+        `}
+      </style>
+      <Card
+        title="Метод Рунге-Кутты 4-го порядка"
+        style={{
+          width: '100%',
+          maxWidth: 1200,
+          margin: '20px auto',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+          borderRadius: '8px',
+        }}
+      >
+        <Collapse defaultActiveKey={[]} style={{ marginBottom: '20px' }}>
+          <Panel header="Теория" key="1">
+            <Typography style={{ textAlign: 'left', padding: '0 20px' }}>
+              <Paragraph>
+                Для дифференциального уравнения первого порядка:
+                <MathJax>{`\\[ \\frac{dy}{dx} = f(x, y) \\]`}</MathJax>
+                с начальными условиями <MathJax inline dynamic>{`\\( y(x_0) = y_0 \\)`}</MathJax>, метод Рунге-Кутты 4-го порядка аппроксимирует решение, используя формулу:
+                <MathJax>{`\\[ k_1 = f(x_n, y_n), \\]`}</MathJax>
+                <MathJax>{`\\[ k_2 = f\\left(x_n + \\frac{h}{2}, y_n + \\frac{h}{2} \\cdot k_1\\right), \\]`}</MathJax>
+                <MathJax>{`\\[ k_3 = f\\left(x_n + \\frac{h}{2}, y_n + \\frac{h}{2} \\cdot k_2\\right), \\]`}</MathJax>
+                <MathJax>{`\\[ k_4 = f(x_n + h, y_n + h \\cdot k_3), \\]`}</MathJax>
+                <MathJax>{`\\[ y_{n+1} = y_n + \\frac{h}{6} \\cdot (k_1 + 2k_2 + 2k_3 + k_4) \\]`}</MathJax>
+                где <MathJax inline dynamic>{`\\( h \\)`}</MathJax> — шаг, <MathJax inline dynamic>{`\\( x_{n+1} = x_n + h \\)`}</MathJax>.
+              </Paragraph>
+              <Paragraph>
+                Если уравнение имеет вид <MathJax inline dynamic>{`\\( y' = f(x) \\)`}</MathJax> (не зависит от <MathJax inline dynamic>{`\\( y \\)`}</MathJax>), точное решение можно найти как:
+                <MathJax>{`\\[ y(x) = y_0 + \\int_{x_0}^{x} f(t) \\, dt \\]`}</MathJax>
+              </Paragraph>
+              <Paragraph>
+                Метод Рунге-Кутты 4-го порядка имеет погрешность <MathJax inline dynamic>{`\\( O(h^4) \\)`}</MathJax>, что делает его одним из самых точных одностадийных методов.
+              </Paragraph>
+            </Typography>
+          </Panel>
+        </Collapse>
 
-      {/* Ввод данных */}
-      <DiffurInputs
-        latex={latex}
-        setLatex={setLatex}
-        x0={x0}
-        setX0={setX0}
-        y0={y0}
-        setY0={setY0}
-        xEnd={xEnd}
-        setXEnd={setXEnd}
-        h={h}
-        setH={setH}
-      />
-
-      {/* Кнопка для решения */}
-      <Button onClick={solve} style={{ marginTop: '10px' }}>
-        Решить
-      </Button>
-
-      {/* График */}
-      <DiffurChart eulerData={rungeData} exactData={exactData} />
-    </Card>
+        <div className="integration-container">
+          <div className="inputs-block">
+            <DiffurInputs
+              latex={latex}
+              setLatex={setLatex}
+              x0={x0}
+              setX0={setX0}
+              y0={y0}
+              setY0={setY0}
+              b={b}
+              setB={setB}
+              n={n}
+              setN={setN}
+            />
+            {b <= x0 && (
+              <Typography.Text type="danger" style={{ display: 'block', marginTop: '8px', fontSize: '12px' }}>
+                Ошибка: b должно быть больше x₀.
+              </Typography.Text>
+            )}
+            <Button
+              onClick={solve}
+              type="primary"
+              style={{
+                marginTop: '16px',
+                width: '100%',
+                padding: '8px 0',
+                borderRadius: '6px',
+              }}
+            >
+              Решить
+            </Button>
+          </div>
+          <div className="chart-block">
+            <DiffurChart eulerData={rungeData} exactData={exactData} />
+          </div>
+        </div>
+      </Card>
+    </>
   );
 };
 

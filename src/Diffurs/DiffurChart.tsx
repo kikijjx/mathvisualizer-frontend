@@ -10,6 +10,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
+import zoomPlugin from 'chartjs-plugin-zoom';
 
 ChartJS.register(
   CategoryScale,
@@ -18,7 +19,8 @@ ChartJS.register(
   LineElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  zoomPlugin
 );
 
 interface DiffurChartProps {
@@ -27,23 +29,25 @@ interface DiffurChartProps {
 }
 
 const DiffurChart: React.FC<DiffurChartProps> = ({ eulerData, exactData }) => {
-  // Данные для графика метода Эйлера
   const eulerDataset = {
     label: 'Метод Эйлера',
     data: eulerData.map((point) => ({ x: point.x, y: point.y })),
     borderColor: 'rgba(255, 99, 132, 1)',
+    borderWidth: 3,
     fill: false,
     pointRadius: 3,
+    hoverBorderWidth: 4,
   };
 
-  // Данные для точного решения (если есть)
   const exactDataset = exactData.length > 0
     ? {
         label: 'Точное решение',
         data: exactData.map((point) => ({ x: point.x, y: point.y })),
         borderColor: 'rgba(75, 192, 192, 1)',
+        borderWidth: 3,
         fill: false,
         pointRadius: 0,
+        hoverBorderWidth: 4,
       }
     : null;
 
@@ -52,12 +56,18 @@ const DiffurChart: React.FC<DiffurChartProps> = ({ eulerData, exactData }) => {
   };
 
   const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
     scales: {
       x: {
         type: 'linear' as const,
         title: {
           display: true,
           text: 'x',
+          font: { size: 14 },
+        },
+        grid: {
+          color: 'rgba(200, 200, 200, 0.2)',
         },
       },
       y: {
@@ -65,11 +75,32 @@ const DiffurChart: React.FC<DiffurChartProps> = ({ eulerData, exactData }) => {
         title: {
           display: true,
           text: 'y',
+          font: { size: 14 },
+        },
+        grid: {
+          color: 'rgba(200, 200, 200, 0.2)',
         },
       },
     },
     plugins: {
+      legend: {
+        position: 'top' as const,
+        labels: {
+          font: { size: 12 },
+          padding: 20,
+          usePointStyle: true,
+        },
+        onClick: (e: any, legendItem: any, legend: any) => {
+          const index = legendItem.datasetIndex;
+          const ci = legend.chart;
+          ci.toggleDataVisibility(index);
+          ci.update();
+        },
+      },
       tooltip: {
+        enabled: true,
+        mode: 'index' as const,
+        intersect: false,
         callbacks: {
           label: (context: any) => {
             const datasetIndex = context.datasetIndex;
@@ -79,11 +110,34 @@ const DiffurChart: React.FC<DiffurChartProps> = ({ eulerData, exactData }) => {
           },
         },
       },
+      zoom: {
+        pan: {
+          enabled: true,
+          mode: 'xy' as const,
+        },
+        zoom: {
+          wheel: {
+            enabled: true,
+          },
+          pinch: {
+            enabled: true,
+          },
+          mode: 'xy' as const,
+        },
+      },
+    },
+    animation: {
+      duration: 500,
+      easing: 'easeInOutQuad' as const,
+    },
+    hover: {
+      mode: 'index' as const,
+      intersect: false,
     },
   };
 
   return (
-    <div style={{ marginTop: '20px', height: '400px' }}>
+    <div style={{ height: '500px', width: '100%', position: 'relative' }}>
       <Line data={chartData} options={chartOptions} />
     </div>
   );

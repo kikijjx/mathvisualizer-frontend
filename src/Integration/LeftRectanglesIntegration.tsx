@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Card, Button, Typography, Collapse } from 'antd';
+import { Card, Button, Typography, Collapse, message } from 'antd';
 import IntegrationInputs from './IntegrationInputs';
 import IntegrationChart from './IntegrationChart';
 import IntegrationTable from './IntegrationTable';
@@ -27,70 +27,130 @@ const LeftRectanglesIntegration: React.FC = () => {
   const [result, setResult] = useState<number | null>(null);
   const [functionData, setFunctionData] = useState<{ x: number; y: number }[]>([]);
   const [rectanglesData, setRectanglesData] = useState<{ x: number; y: number }[]>([]);
-  const [tableData, setTableData] = useState<{ method: string; approx: number; error: number; theoreticalError: number; n?: number }[]>([]);
+  const [tableData, setTableData] = useState<
+    { method: string; approx: number; rungeError: number; theoreticalError: number; n?: number }[]
+  >([]);
   const [exactIntegral, setExactIntegral] = useState<number | null>(null);
 
   const integrate = () => {
     console.time('Integration Time');
 
-    const processedLatex = replaceMathFunctions(latex);
-    const func = (x: number) => eval(processedLatex.replace(/x/g, `(${x})`));
-    const exact = calculateExactIntegral(a, b);
-    setExactIntegral(exact);
-
-    let currentN = n;
-    if (mode === 'precision') {
-      currentN = calculateNForPrecision(func, a, b, precision, 'Левых прямоугольников');
-      setN(currentN);
+    // Проверка входных данных
+    if (a >= b) {
+      message.error('Нижний предел a должен быть меньше верхнего предела b');
+      return;
     }
-    const step = (b - a) / currentN;
-
-    const numPoints = 500;
-    const newFunctionData = [];
-    for (let i = 0; i <= numPoints; i++) {
-      const x = a + (i / numPoints) * (b - a);
-      const y = func(x);
-      newFunctionData.push({ x, y });
+    if (mode === 'precision' && precision <= 0) {
+      message.error('Точность должна быть положительным числом');
+      return;
     }
-    setFunctionData(newFunctionData);
-
-    const newRectanglesData = [];
-    for (let i = 0; i < currentN; i++) {
-      const x = a + i * step;
-      const y = func(x);
-      newRectanglesData.push({ x, y: 0 }, { x, y }, { x: x + step, y }, { x: x + step, y: 0 });
+    if (mode === 'n' && n <= 0) {
+      message.error('Число разбиений n должно быть положительным');
+      return;
     }
-    setRectanglesData(newRectanglesData);
 
-    const methods = [
-      { name: 'Левых прямоугольников', func: leftRectangles },
-      { name: 'Правых прямоугольников', func: rightRectangles },
-      { name: 'Средних прямоугольников', func: midpointRectangles },
-      { name: 'Трапеций', func: trapezoidal },
-      { name: 'Симпсона', func: simpson },
-    ];
-
-    const newTableData = methods.map((method) => {
-      const usedN = mode === 'precision' ? calculateNForPrecision(func, a, b, precision, method.name) : currentN;
-      const approx = method.func(func, a, b, usedN);
-      const error = Math.abs(exact - approx);
-      const theoreticalError = calculateTheoreticalError(method.name, func, a, b, usedN);
-      return {
-        method: method.name,
-        approx,
-        error,
-        theoreticalError,
-        n: mode === 'precision' ? usedN : undefined,
+    try {
+      const processedLatex = replaceMathFunctions(latex);
+      const func = (x: number) => {
+        const result = eval(processedLatex.replace(/x/g, `(${x})`));
+        if (isNaN(result) || !isFinite(result)) throw new Error('Недопустимое значение функции');
+        return result;
       };
-    });
 
-    setTableData(newTableData);
+      const exact = calculateExactIntegral(func, a, b);
+      setExactIntegral(exact);
 
-    const leftRectanglesResult = leftRectangles(func, a, b, currentN);
-    setResult(leftRectanglesResult);
+      let currentN = n;
+      if (mode === 'precision') {
+        currentN = calculateNForPrecision(func, a, b, precision, 'Левых прямоугольников');
+        setN(currentN);
+      }
+      const step = (b - a) / currentN;
 
-    console.log(`Число разбиений (n): ${currentN}`);
-    console.log(`Найденное значение интеграла: ${leftRectanglesResult}`);
+      // Генерация данных для графика функции
+      const numPoints = 500;
+      const newFunctionData: { x: number; y: number }[] = [];
+      for (let i = 0; i <= numPoints; i++) {
+        const x = a + (i / numPoints) * (b - a);
+        try {
+          const y = func(x);
+          newFunctionData.push({ x, y });
+        } catch {
+          continue; // Пропускаем точки с ошибками
+        }
+      }
+      setFunctionData(newFunctionData);
+
+      // Генерация данных для прямоугольников
+      const newRectanglesData: { x: number; y: number }[] = [];
+      for (let i = 0; i < currentN; i++) {
+        const x = a + i * step;
+        try {
+          const y = func(x);
+          newRectanglesData.push(
+            { x, y: 0 },
+            { x, y },
+            { x: x + step, y },
+            { x: x + step, y: 0 }
+          );
+        } catch {
+          continue;
+        }
+      }
+      setRectanglesData(newRectanglesData);
+
+      // Вычисление результатов для всех методов
+      const methods = [
+        { name: 'Левых прямоугольников', func: leftRectangles },
+        { name: 'Правых прямоугольников', func: rightRectangles },
+        { name: 'Средних прямоугольников', func: midpointRectangles },
+        { name: 'Трапеций', func: trapezoidal },
+        { name: 'Симпсона', func: simpson },
+      ];
+
+      const newTableData = methods.map((method) => {
+        const usedN =
+          mode === 'precision'
+            ? calculateNForPrecision(func, a, b, precision, method.name)
+            : currentN;
+        const finalN = method.name === 'Симпсона' ? (usedN % 2 === 0 ? usedN : usedN + 1) : usedN;
+        let approx: number;
+        let rungeError: number;
+        try {
+          approx = method.func(func, a, b, finalN);
+          const I_2n = method.func(func, a, b, 2 * finalN);
+          rungeError = Math.abs(approx - I_2n);
+        } catch {
+          approx = NaN;
+          rungeError = NaN;
+        }
+        const theoreticalError = calculateTheoreticalError(method.name, func, a, b, finalN);
+        return {
+          method: method.name,
+          approx,
+          rungeError,
+          theoreticalError,
+          n: mode === 'precision' ? finalN : undefined,
+        };
+      });
+
+      setTableData(newTableData);
+
+      // Результат для метода левых прямоугольников
+      const leftRectanglesResult = leftRectangles(func, a, b, currentN);
+      setResult(leftRectanglesResult);
+
+      console.log(`Число разбиений (n): ${currentN}`);
+      console.log(`Найденное значение интеграла: ${leftRectanglesResult}`);
+    } catch (error) {
+      console.error('Ошибка при вычислении:', error);
+      message.error('Ошибка при вычислении интеграла. Проверьте введённую функцию.');
+      setResult(null);
+      setTableData([]);
+      setFunctionData([]);
+      setRectanglesData([]);
+    }
+
     console.timeEnd('Integration Time');
   };
 
@@ -124,42 +184,42 @@ const LeftRectanglesIntegration: React.FC = () => {
           }
         `}
       </style>
-      <Card 
-        title="Метод левых прямоугольников" 
-        style={{ 
-          width: '100%', 
-          maxWidth: 1200, 
-          margin: '20px auto', 
+      <Card
+        title="Метод левых прямоугольников"
+        style={{
+          width: '100%',
+          maxWidth: 1200,
+          margin: '20px auto',
           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
-          borderRadius: '8px'
+          borderRadius: '8px',
         }}
       >
-        <Collapse defaultActiveKey={[]} style={{ marginBottom: '20px' }}>
-          <Panel header="Теория" key="1">
-            <Typography style={{ textAlign: 'left', padding: '0 20px' }}>
-              <Paragraph>
-                Пусть требуется вычислить определённый интеграл:
-                <MathJax>{`\\[ I = \\int_{a}^{b} f(x) \\, dx \\]`}</MathJax>
-                Определённый интеграл представляет собой площадь под кривой, ограниченной подынтегральной функцией <MathJax inline dynamic>\( f(x) \)</MathJax>.
-              </Paragraph>
-              <Paragraph>
-                Для вычисления определённого интеграла площадь под кривой аппроксимируется прямоугольниками. Площадь каждого прямоугольника можно определить как:
-                <MathJax>{`\\[ S_i = f(x_i) \\cdot h \\]`}</MathJax>
-                где:
-                <ul>
-                  <li><MathJax inline dynamic>{`\\( S_i \\)`}</MathJax> — площадь <MathJax inline dynamic>{`\\( i \\)`}</MathJax>-го прямоугольника</li>
-                  <li><MathJax inline dynamic>{`\\( f(x_i) \\)`}</MathJax> — значение функции в левой точке отрезка</li>
-                  <li><MathJax inline dynamic>{`\\( h = \\frac{b - a}{n} \\)`}</MathJax> — шаг разбиения (ширина прямоугольника)</li>
-                  <li><MathJax inline dynamic>{`\\( n \\)`}</MathJax> — количество разбиений</li>
-                </ul>
-              </Paragraph>
-              <Paragraph>
-                Общая площадь под кривой аппроксимируется суммой площадей всех прямоугольников:
-                <MathJax>{`\\[ I \\approx \\sum_{i=0}^{n-1} S_i = h \\left( f(x_0) + f(x_1) + \\dots + f(x_{n-1}) \\right) \\]`}</MathJax>
-              </Paragraph>
-            </Typography>
-          </Panel>
-        </Collapse>
+<Collapse defaultActiveKey={[]} style={{ marginBottom: '20px' }}>
+  <Panel header="Теория" key="1">
+    <Typography style={{ textAlign: 'left', padding: '0 20px' }}>
+      <Paragraph>
+        Метод левых прямоугольников используется для приближённого вычисления определённого интеграла:
+        <MathJax>{`\\[ I = \\int_{a}^{b} f(x) \\, dx \\]`}</MathJax>
+        где <MathJax inline dynamic>{`\\( f(x) \\)`}</MathJax> — подынтегральная функция, непрерывная на отрезке <MathJax inline dynamic>{`\\( [a, b] \\)`}</MathJax>. Интеграл представляет площадь криволинейной трапеции под графиком функции.
+      </Paragraph>
+      <Paragraph>
+        Интервал <MathJax inline dynamic>{`\\( [a, b] \\)`}</MathJax> разбивается на <MathJax inline dynamic>{`\\( n \\)`}</MathJax> равных подынтервалов с шагом <MathJax inline dynamic>{`\\( h = \\frac{b - a}{n} \\)`}</MathJax>. Узлы разбиения: <MathJax inline dynamic>{`\\( a_k = a + k h \\)`}</MathJax>, где <MathJax inline dynamic>{`\\( k = 0, 1, \\dots, n \\)`}</MathJax>. На каждом подынтервале <MathJax inline dynamic>{`\\( [a_{k-1}, a_k] \\)`}</MathJax> функция <MathJax inline dynamic>{`\\( f(x) \\)`}</MathJax> аппроксимируется полиномом Лагранжа нулевой степени, то есть значением <MathJax inline dynamic>{`\\( f(a_{k-1}) \\)`}</MathJax>. Геометрически это заменяет криволинейную трапецию прямоугольником с основанием <MathJax inline dynamic>{`\\( h \\)`}</MathJax> и высотой <MathJax inline dynamic>{`\\( f(a_{k-1}) \\)`}</MathJax>.
+      </Paragraph>
+      <Paragraph>
+        Формула левых прямоугольников:
+        <MathJax>{`\\[ I \\approx h \\sum_{k=0}^{n-1} f(a_k) = h \\left( f(a_0) + f(a_1) + \\dots + f(a_{n-1}) \\right) \\]`}</MathJax>
+        Это сумма площадей прямоугольников, составляющих ступенчатую фигуру, касающуюся графика функции в левых концах подынтервалов.
+      </Paragraph>
+      <Paragraph>
+        Погрешность на одном подынтервале:
+        <MathJax>{`\\[ \\left| \\int_{a_{k-1}}^{a_k} f(x) \\, dx - h f(a_{k-1}) \\right| \\leq \\frac{M_1 h^2}{2} \\]`}</MathJax>
+        где <MathJax inline dynamic>{`\\( M_1 = \\max_{[a, b]} |f'(x)| \\)`}</MathJax>. Суммарная погрешность:
+        <MathJax>{`\\[ R_0 \\leq \\frac{M_1 h (b - a)}{2} = O(h) \\]`}</MathJax>
+        Линейная зависимость погрешности от <MathJax inline dynamic>{`\\( h \\)`}</MathJax> указывает на низкую точность метода, обусловленную большими расхождениями между графиком функции и аппроксимацией.
+      </Paragraph>
+    </Typography>
+  </Panel>
+</Collapse>
 
         <div className="integration-container">
           <div className="inputs-block">
@@ -177,14 +237,14 @@ const LeftRectanglesIntegration: React.FC = () => {
               mode={mode}
               setMode={setMode}
             />
-            <Button 
-              onClick={integrate} 
-              type="primary" 
-              style={{ 
-                marginTop: '16px', 
-                width: '100%', 
+            <Button
+              onClick={integrate}
+              type="primary"
+              style={{
+                marginTop: '16px',
+                width: '100%',
                 padding: '8px 0',
-                borderRadius: '6px'
+                borderRadius: '6px',
               }}
             >
               Интегрировать

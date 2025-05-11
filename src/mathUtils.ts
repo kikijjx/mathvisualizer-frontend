@@ -1,25 +1,32 @@
+// Замена математических функций для корректной обработки в JavaScript
 export const replaceMathFunctions = (expression: string): string => {
-    const mathFunctions = ['cos', 'sin', 'tg', 'acos', 'asin', 'atg', 'sqrt', 'log', 'exp', 'abs'];
-    let result = expression;
-    mathFunctions.forEach((func) => {
-      result = result.replace(new RegExp(`\\b${func}\\b`, 'g'), `Math.${func}`);
-    });
-    return result;
-  };
+  const mathFunctions = ['cos', 'sin', 'tan', 'acos', 'asin', 'atan', 'sqrt', 'log', 'exp', 'abs'];
+  let result = expression;
+  mathFunctions.forEach((func) => {
+    result = result.replace(new RegExp(`\\b${func}\\b`, 'g'), `Math.${func}`);
+  });
+  return result.replace(/tg/g, 'Math.tan').replace(/atg/g, 'Math.atan');
+};
 
-// Функция для вычисления первой производной численно
+// Численное вычисление первой производной
 export const firstDerivative = (func: (x: number) => number, x: number, h: number = 0.001): number => {
   return (func(x + h) - func(x - h)) / (2 * h);
 };
 
-// Функция для вычисления второй производной численно
+// Численное вычисление второй производной
 export const secondDerivative = (func: (x: number) => number, x: number, h: number = 0.001): number => {
   return (func(x + h) - 2 * func(x) + func(x - h)) / (h * h);
 };
 
-// Функция для вычисления четвертой производной численно
+// Численное вычисление четвёртой производной
 export const fourthDerivative = (func: (x: number) => number, x: number, h: number = 0.001): number => {
-  return (func(x + 2 * h) - 4 * func(x + h) + 6 * func(x) - 4 * func(x - h) + func(x - 2 * h)) / Math.pow(h, 4);
+  return (
+    func(x + 2 * h) -
+    4 * func(x + h) +
+    6 * func(x) -
+    4 * func(x - h) +
+    func(x - 2 * h)
+  ) / Math.pow(h, 4);
 };
 
 // Метод левых прямоугольников
@@ -68,6 +75,7 @@ export const trapezoidal = (func: (x: number) => number, a: number, b: number, n
 
 // Метод Симпсона
 export const simpson = (func: (x: number) => number, a: number, b: number, n: number): number => {
+  if (n % 2 !== 0) n += 1; // Гарантируем чётное n
   const step = (b - a) / n;
   let sum = func(a) + func(b);
   for (let i = 1; i < n; i++) {
@@ -77,6 +85,26 @@ export const simpson = (func: (x: number) => number, a: number, b: number, n: nu
   return (step / 3) * sum;
 };
 
+// Вычисление максимума производной на отрезке [a, b]
+const findMaxDerivative = (
+  func: (x: number) => number,
+  a: number,
+  b: number,
+  derivativeFunc: (f: (x: number) => number, x: number, h?: number) => number
+): number => {
+  const numPoints = 1000;
+  let maxDerivative = 0;
+  for (let i = 0; i <= numPoints; i++) {
+    const x = a + (i / numPoints) * (b - a);
+    const derivativeValue = Math.abs(derivativeFunc(func, x));
+    if (!isNaN(derivativeValue) && isFinite(derivativeValue)) {
+      maxDerivative = Math.max(maxDerivative, derivativeValue);
+    }
+  }
+  return maxDerivative || 1; // Возвращаем 1, если производная не определена
+};
+
+// Расчет числа разбиений по заданной точности с учётом правила Рунге
 export const calculateNForPrecision = (
   func: (x: number) => number,
   a: number,
@@ -84,56 +112,101 @@ export const calculateNForPrecision = (
   precision: number,
   method: string
 ): number => {
-  const numPoints = 100;
-  let maxDerivative = 0;
-  for (let i = 0; i <= numPoints; i++) {
-    const x = a + (i / numPoints) * (b - a);
-    let derivative;
-    if (method.includes('прямоугольников')) {
-      derivative = Math.abs(firstDerivative(func, x));
-    } else if (method === 'Трапеций') {
-      derivative = Math.abs(secondDerivative(func, x));
-    } else if (method === 'Симпсона') {
-      derivative = Math.abs(fourthDerivative(func, x));
-    } else {
-      derivative = 0;
+  const methodFuncs: { [key: string]: (f: (x: number) => number, a: number, b: number, n: number) => number } = {
+    'Левых прямоугольников': leftRectangles,
+    'Правых прямоугольников': rightRectangles,
+    'Средних прямоугольников': midpointRectangles,
+    'Трапеций': trapezoidal,
+    'Симпсона': simpson,
+  };
+
+  const methodOrders: { [key: string]: number } = {
+    'Левых прямоугольников': 1,
+    'Правых прямоугольников': 1,
+    'Средних прямоугольников': 2,
+    'Трапеций': 2,
+    'Симпсона': 4,
+  };
+
+  const integrationFunc = methodFuncs[method];
+  const order = methodOrders[method];
+
+  if (!integrationFunc || !order) {
+    throw new Error(`Неизвестный метод: ${method}`);
+  }
+
+  let n = method === 'Симпсона' ? 2 : 1;
+  const targetError = precision; // Сравниваем |I_n - I_{2n}| напрямую с epsilon
+
+  while (true) {
+    try {
+      const I_n = integrationFunc(func, a, b, n);
+      const I_2n = integrationFunc(func, a, b, 2 * n);
+      const errorEstimate = Math.abs(I_n - I_2n);
+
+      console.log(`Метод: ${method}, n: ${n}, I_n: ${I_n}, I_2n: ${I_2n}, |I_n - I_{2n}|: ${errorEstimate}, Целевая погрешность: ${targetError}`);
+
+      if (isNaN(errorEstimate) || !isFinite(errorEstimate)) {
+        console.warn(`Недопустимая погрешность при n=${n}, пробуем увеличить n`);
+      } else if (errorEstimate <= targetError) {
+        return method === 'Симпсона' && n % 2 !== 0 ? n + 1 : n;
+      }
+
+      n = method === 'Симпсона' ? n + 2 : n + 1;
+      if (n > 1e6) {
+        console.error(`Достигнут максимальный предел итераций для метода ${method}`);
+        return method === 'Симпсона' && n % 2 !== 0 ? n + 1 : n;
+      }
+    } catch (e) {
+      console.warn(`Ошибка при n=${n} для метода ${method}:`, e);
+      n = method === 'Симпсона' ? n + 2 : n + 1;
+      if (n > 1e6) {
+        console.error(`Достигнут максимальный предел итераций для метода ${method}`);
+        return method === 'Симпсона' && n % 2 !== 0 ? n + 1 : n;
+      }
     }
-    maxDerivative = Math.max(maxDerivative, derivative);
   }
-
-  let n = 1;
-  if (method.includes('прямоугольников')) {
-    // Погрешность: ((b - a) * h * M1) / 2 <= precision, где h = (b - a) / n
-    n = Math.ceil(((b - a) * (b - a) * maxDerivative) / (2 * precision));
-  } else if (method === 'Трапеций') {
-    // Погрешность: ((b - a) * h^2 * M2) / 12 <= precision
-    n = Math.ceil(Math.sqrt(((b - a) * (b - a) * (b - a) * maxDerivative) / (12 * precision)));
-  } else if (method === 'Симпсона') {
-    // Погрешность: ((b - a) * h^4 * M4) / 180 <= precision
-    n = Math.ceil(Math.pow(((b - a) * (b - a) * (b - a) * (b - a) * maxDerivative) / (180 * precision), 1 / 4));
-  }
-  return Math.max(n, 1); // Убедимся, что n >= 1
 };
-
-// Функция для вычисления теоретической погрешности
-export const calculateTheoreticalError = (method: string, func: (x: number) => number, a: number, b: number, n: number): number => {
+export const calculateTheoreticalError = (
+  method: string,
+  func: (x: number) => number,
+  a: number,
+  b: number,
+  n: number
+): number => {
   const h = (b - a) / n;
+  let M: number;
 
-  if (method.includes('прямоугольников')) {
-    return (1 / 2) * (b - a) * h;
-  } else if (method === 'Трапеций') {
-    return (-1 / 12) * (b - a) * Math.pow(h, 2);
-  } else if (method === 'Симпсона') {
-    return (-1 / 180) * (b - a) * Math.pow(h, 4);
+  try {
+    if (method.includes('прямоугольников')) {
+      if (method === 'Средних прямоугольников') {
+        M = findMaxDerivative(func, a, b, secondDerivative);
+        return ((b - a) * h * h * M) / 24; // Погрешность O(h^2)
+      } else {
+        M = findMaxDerivative(func, a, b, firstDerivative);
+        return ((b - a) * h * M) / 2; // Погрешность O(h)
+      }
+    } else if (method === 'Трапеций') {
+      M = findMaxDerivative(func, a, b, secondDerivative);
+      return ((b - a) * h * h * M) / 12; // Погрешность O(h^2)
+    } else if (method === 'Симпсона') {
+      M = findMaxDerivative(func, a, b, fourthDerivative);
+      return ((b - a) * Math.pow(h, 4) * M) / 180; // Погрешность O(h^4)
+    }
+  } catch (e) {
+    console.warn(`Ошибка вычисления производной для метода ${method}:`, e);
+    return NaN;
   }
-  return 0;
+
+  return NaN;
 };
 
-// Функция для вычисления точного значения интеграла (аналитически)
-export const calculateExactIntegral = (a: number, b: number): number => {
-  return -Math.cos(b) + Math.cos(a);
+// Точное значение интеграла (численное с высокой точностью)
+export const calculateExactIntegral = (func: (x: number) => number, a: number, b: number): number => {
+  return simpson(func, a, b, 10000); // Используем метод Симпсона с большим n
 };
 
+// Остальные функции остаются без изменений
 export const eulerMethod = (
   f: (x: number, y: number) => number,
   x0: number,
@@ -144,7 +217,7 @@ export const eulerMethod = (
   const result = [{ x: x0, y: y0 }];
   let x = x0;
   let y = y0;
-  while (x < xEnd - h / 2) { // Учитываем погрешность округления
+  while (x < xEnd - h / 2) {
     y += h * f(x, y);
     x += h;
     result.push({ x, y });
@@ -171,7 +244,6 @@ export const koshiMethod = (
   return result;
 };
 
-// Метод Рунге-Кутты 4-го порядка
 export const rungeKutta4Method = (
   f: (x: number, y: number) => number,
   x0: number,
@@ -202,14 +274,12 @@ export const isIndependentOfY = (f: (x: number, y: number) => number, x: number,
   }
 };
 
-// Вычисление точного решения (численное интегрирование)
 export const calculateExactSolution = (
   f: (x: number, y: number) => number,
   x0: number,
   y0: number,
   x: number
 ): number => {
-  // Используем метод трапеций для численного интегрирования f(x, 0) от x0 до x
   const n = 1000;
   const h = (x - x0) / n;
   let sum = (f(x0, 0) + f(x, 0)) / 2;

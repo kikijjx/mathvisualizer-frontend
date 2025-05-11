@@ -5,7 +5,7 @@ import { MathJax } from 'better-react-mathjax';
 interface TableData {
   method: string;
   approx: number;
-  error: number;
+  rungeError: number; // Оценка погрешности по правилу Рунге: |I_n - I_{2n}|
   theoreticalError: number;
   n?: number;
 }
@@ -32,19 +32,19 @@ const IntegrationTable: React.FC<IntegrationTableProps> = ({ data, highlightedMe
       title: <MathJax inline dynamic>{`\\( I_{\\text{приближённое}} \\)`}</MathJax>,
       dataIndex: 'approx',
       key: 'approx',
-      render: (value: number) => value.toFixed(6),
+      render: (value: number) => (isNaN(value) ? 'NaN' : value.toFixed(6)),
     },
     {
-      title: <MathJax inline dynamic>{`\\( |I_{\\text{точное}} - I_{\\text{приближённое}}| \\)`}</MathJax>,
-      dataIndex: 'error',
-      key: 'error',
-      render: (value: number) => value.toFixed(6),
+      title: <MathJax inline dynamic>{`\\( |I_n - I_{2n}| \\)`}</MathJax>,
+      dataIndex: 'rungeError',
+      key: 'rungeError',
+      render: (value: number) => (isNaN(value) ? 'NaN' : value.toFixed(6)),
     },
     {
       title: 'Теоретическая погрешность',
       dataIndex: 'theoreticalError',
       key: 'theoreticalError',
-      render: (value: number) => value.toFixed(6),
+      render: (value: number) => (isNaN(value) ? 'NaN' : value.toFixed(6)),
     },
     ...(showN
       ? [
