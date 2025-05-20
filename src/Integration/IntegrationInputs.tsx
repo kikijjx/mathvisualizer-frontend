@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, memo } from 'react';
 import { Input, Typography, Radio } from 'antd';
 import { MathJax } from 'better-react-mathjax';
 import { debounce } from 'lodash';
@@ -18,29 +18,71 @@ interface IntegrationInputsProps {
   setPrecision: (value: number) => void;
   mode: 'n' | 'precision';
   setMode: (value: 'n' | 'precision') => void;
+  methodName?: string;
 }
 
+// Компонент для отображения постановки задачи в LaTeX
+const TaskStatement = memo(
+  ({ latex, a, b, n, precision, mode }: {
+    latex: string;
+    a: number;
+    b: number;
+    n: number;
+    precision: number;
+    mode: 'n' | 'precision';
+    methodName?: string;
+  }) => {
+    const safeLatex = latex && latex.trim() ? latex : 'x';
+    const integral = `\\int_{${a}}^{${b}} ${safeLatex} \\, dx`;
+    const condition = mode === 'n'
+      ? `n = ${n}`
+      : `\\varepsilon = ${precision}`;
+
+    return (
+      <div style={{
+        marginTop: '16px',
+        textAlign: 'center',
+        padding: '12px',
+        background: '#f9f9f9',
+        border: '1px solid #e8e8e8',
+        borderRadius: '6px',
+        boxShadow: '0 1px 4px rgba(0, 0, 0, 0.05)',
+        fontSize: '16px',
+      }}>
+        <p style={{ margin: 0 }}>
+          Вычислить&nbsp;
+          <MathJax inline>{`\\( ${integral} \\)`}</MathJax>
+          &nbsp;, при&nbsp;
+          <MathJax inline>{`\\( ${condition} \\)`}</MathJax>.
+        </p>
+      </div>
+    );
+  }
+);
+
+
+
 const IntegrationInputs: React.FC<IntegrationInputsProps> = React.memo(
-  ({ latex, setLatex, a, setA, b, setB, n, setN, precision, setPrecision, mode, setMode }) => {
-    // Debounce для обработки ввода
+  ({ latex, setLatex, a, setA, b, setB, n, setN, precision, setPrecision, mode, setMode, methodName }) => {
+    // Debounce с задержкой 100 мс
     const debouncedSetLatex = useCallback(
-      debounce((value: string) => setLatex(value), 300),
+      debounce((value: string) => setLatex(value), 100),
       [setLatex]
     );
     const debouncedSetA = useCallback(
-      debounce((value: number) => setA(value), 300),
+      debounce((value: number) => setA(value), 100),
       [setA]
     );
     const debouncedSetB = useCallback(
-      debounce((value: number) => setB(value), 300),
+      debounce((value: number) => setB(value), 100),
       [setB]
     );
     const debouncedSetN = useCallback(
-      debounce((value: number) => setN(value), 300),
+      debounce((value: number) => setN(value), 100),
       [setN]
     );
     const debouncedSetPrecision = useCallback(
-      debounce((value: number) => setPrecision(value), 300),
+      debounce((value: number) => setPrecision(value), 100),
       [setPrecision]
     );
 
@@ -60,9 +102,6 @@ const IntegrationInputs: React.FC<IntegrationInputsProps> = React.memo(
           placeholder="Например, x^2 или cos(x)"
           style={{ marginBottom: '16px', borderRadius: '6px' }}
         />
-        <div style={{ marginBottom: '16px', textAlign: 'center' }}>
-          <MathJax inline dynamic>{`\\( f(x) = ${latex || 'x'} \\)`}</MathJax>
-        </div>
         <Input
           addonBefore="a ="
           value={a}
@@ -103,6 +142,15 @@ const IntegrationInputs: React.FC<IntegrationInputsProps> = React.memo(
             style={{ marginBottom: '16px', borderRadius: '6px' }}
           />
         )}
+        <TaskStatement
+          latex={latex}
+          a={a}
+          b={b}
+          n={n}
+          precision={precision}
+          mode={mode}
+          methodName={methodName}
+        />
       </div>
     );
   }

@@ -198,28 +198,27 @@ const [tableData, setTableData] = useState<
   <Panel header="Теория" key="1">
     <Typography style={{ textAlign: 'left', padding: '0 20px' }}>
       <Paragraph>
-        Метод правых прямоугольников предназначен для приближённого вычисления определённого интеграла:
+        Метод правых прямоугольников используется для приближённого вычисления определённого интеграла:
         <MathJax>{`\\[ I = \\int_{a}^{b} f(x) \\, dx \\]`}</MathJax>
-        где <MathJax inline dynamic>{`\\( f(x) \\)`}</MathJax> — подынтегральная функция, непрерывная на отрезке <MathJax inline dynamic>{`\\( [a, b] \\)`}</MathJax>. Интеграл представляет площадь криволинейной трапеции под графиком функции.
       </Paragraph>
       <Paragraph>
-        Интервал <MathJax inline dynamic>{`\\( [a, b] \\)`}</MathJax> разбивается на <MathJax inline dynamic>{`\\( n \\)`}</MathJax> равных подынтервалов с шагом <MathJax inline dynamic>{`\\( h = \\frac{b - a}{n} \\)`}</MathJax>. Узлы разбиения: <MathJax inline dynamic>{`\\( a_k = a + k h \\)`}</MathJax>, где <MathJax inline dynamic>{`\\( k = 0, 1, \\dots, n \\)`}</MathJax>. На каждом подынтервале <MathJax inline dynamic>{`\\( [a_{k-1}, a_k] \\)`}</MathJax> функция <MathJax inline dynamic>{`\\( f(x) \\)`}</MathJax> аппроксимируется полиномом Лагранжа нулевой степени, то есть значением <MathJax inline dynamic>{`\\( f(a_k) \\)`}</MathJax>. Геометрически это заменяет криволинейную трапецию прямоугольником с основанием <MathJax inline dynamic>{`\\( h \\)`}</MathJax> и высотой <MathJax inline dynamic>{`\\( f(a_k) \\)`}</MathJax>, касающимся графика в правом конце подынтервала.
+        Отрезок <MathJax inline dynamic>{`\\( [a, b] \\)`}</MathJax> делится на <MathJax inline dynamic>{`\\( n \\)`}</MathJax> равных частей с шагом <MathJax inline dynamic>{`\\( h = \\frac{b - a}{n} \\)`}</MathJax>. Значения функции берутся в правых концах подынтервалов: <MathJax inline dynamic>{`\\( a_k = a + k h \\)`}</MathJax>.
       </Paragraph>
       <Paragraph>
-        Формула правых прямоугольников:
-        <MathJax>{`\\[ I \\approx h \\sum_{k=1}^{n} f(a_k) = h \\left( f(a_1) + f(a_2) + \\dots + f(a_n) \\right) \\]`}</MathJax>
-        Это сумма площадей прямоугольников, составляющих ступенчатую фигуру, касающуюся графика функции в правых концах подынтервалов.
+        Формула:
+        <MathJax>{`\\[ I \\approx h \\sum_{k=1}^{n} f(a_k) \\]`}</MathJax>
+        Это сумма площадей прямоугольников, построенных по правым концам отрезков.
       </Paragraph>
       <Paragraph>
-        Погрешность на одном подынтервале аналогична левым прямоугольникам, так как используется тот же порядок аппроксимации:
+        Погрешность:
         <MathJax>{`\\[ \\left| \\int_{a_{k-1}}^{a_k} f(x) \\, dx - h f(a_k) \\right| \\leq \\frac{M_1 h^2}{2} \\]`}</MathJax>
         где <MathJax inline dynamic>{`\\( M_1 = \\max_{[a, b]} |f'(x)| \\)`}</MathJax>. Суммарная погрешность:
-        <MathJax>{`\\[ R_0 \\leq \\frac{M_1 h (b - a)}{2} = O(h) \\]`}</MathJax>
-        Линейная погрешность отражает низкую точность метода, так как аппроксимация не учитывает изменения функции внутри подынтервала.
+        <MathJax>{`\\[ R \\leq \\frac{M_1 (b - a) h}{2} = O(h) \\]`}</MathJax>
       </Paragraph>
     </Typography>
   </Panel>
 </Collapse>
+
         <div className="integration-container">
           <div className="inputs-block">
             <IntegrationInputs

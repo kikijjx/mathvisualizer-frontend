@@ -26,18 +26,21 @@ ChartJS.register(
 interface DiffurChartProps {
   eulerData: { x: number; y: number }[];
   exactData: { x: number; y: number }[];
+  methodLabel: string; // название текущего численного метода
 }
 
-const DiffurChart: React.FC<DiffurChartProps> = ({ eulerData, exactData }) => {
-  const eulerDataset = {
-    label: 'Метод Эйлера',
-    data: eulerData.map((point) => ({ x: point.x, y: point.y })),
-    borderColor: 'rgba(255, 99, 132, 1)',
-    borderWidth: 3,
-    fill: false,
-    pointRadius: 3,
-    hoverBorderWidth: 4,
-  };
+
+const DiffurChart: React.FC<DiffurChartProps> = ({ eulerData, exactData, methodLabel }) => {
+  const methodDataset = {
+  label: methodLabel,
+  data: eulerData.map((point) => ({ x: point.x, y: point.y })),
+  borderColor: 'rgba(255, 99, 132, 1)',
+  borderWidth: 3,
+  fill: false,
+  pointRadius: 3,
+  hoverBorderWidth: 4,
+};
+
 
   const exactDataset = exactData.length > 0
     ? {
@@ -52,8 +55,8 @@ const DiffurChart: React.FC<DiffurChartProps> = ({ eulerData, exactData }) => {
     : null;
 
   const chartData = {
-    datasets: exactDataset ? [eulerDataset, exactDataset] : [eulerDataset],
-  };
+  datasets: exactDataset ? [methodDataset, exactDataset] : [methodDataset],
+};
 
   const chartOptions = {
     responsive: true,

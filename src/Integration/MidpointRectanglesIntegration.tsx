@@ -195,46 +195,32 @@ const MidpointRectanglesIntegration: React.FC = () => {
         }}
       >
 <Collapse defaultActiveKey={[]} style={{ marginBottom: '20px' }}>
-          <Panel header="Теория" key="1">
-            <Typography style={{ textAlign: 'left', padding: '0 20px' }}>
-              <Paragraph>
-                Метод средних прямоугольников используется для приближённого вычисления определённого интеграла:
-                <MathJax>{`\\[ I = \\int_{a}^{b} f(x) \\, dx \\]`}</MathJax>
-                где <MathJax inline dynamic>{`\\( f(x) \\)`}</MathJax> — подынтегральная функция, непрерывная на отрезке{' '}
-                <MathJax inline dynamic>{`\\( [a, b] \\)`}</MathJax>. Интеграл представляет площадь криволинейной трапеции под
-                графиком функции.
-              </Paragraph>
-              <Paragraph>
-                Интервал <MathJax inline dynamic>{`\\( [a, b] \\)`}</MathJax> разбивается на{' '}
-                <MathJax inline dynamic>{`\\( n \\)`}</MathJax> равных подынтервалов с шагом{' '}
-                <MathJax inline dynamic>{`\\( h = \\frac{b - a}{n} \\)`}</MathJax>. Узлы разбиения:{' '}
-                <MathJax inline dynamic>{`\\( a_k = a + k h \\)`}</MathJax>, где{' '}
-                <MathJax inline dynamic>{`\\( k = 0, 1, \\dots, n \\)`}</MathJax>. На каждом подынтервале{' '}
-                <MathJax inline dynamic>{`\\( [a_{k-1}, a_k] \\)`}</MathJax> функция{' '}
-                <MathJax inline dynamic>{`\\( f(x) \\)`}</MathJax> аппроксимируется полиномом Лагранжа нулевой степени, то
-                есть значением{' '}
-                <MathJax inline dynamic>{`\\( f\\left( \\frac{a_{k-1} + a_k}{2} \\right) \\)`}</MathJax>. Геометрически это
-                прямоугольник с основанием <MathJax inline dynamic>{`\\( h \\)`}</MathJax> и высотой{' '}
-                <MathJax inline dynamic>{`\\( f\\left( a_{k-1} + \\frac{h}{2} \\right) \\)`}</MathJax>, касающийся графика в
-                середине подынтервала.
-              </Paragraph>
-              <Paragraph>
-                Формула средних прямоугольников:
-                <MathJax>{`\\[ I \\approx h \\sum_{k=0}^{n-1} f\\left( \\frac{a_{k-1} + a_k}{2} \\right) = h \\sum_{k=0}^{n-1} f\\left( a_{k-1} + \\frac{h}{2} \\right) \\]`}</MathJax>
-                Это сумма площадей прямоугольников, составляющих ступенчатую фигуру, касающуюся графика функции в средних
-                точках подынтервалов.
-              </Paragraph>
-              <Paragraph>
-                Погрешность на одном подынтервале:
-                <MathJax>{`\\[ \\left| \\int_{a_{k-1}}^{a_k} f(x) \\, dx - h f\\left( \\frac{a_{k-1} + a_k}{2} \\right) \\right| \\leq \\frac{M_2 h^3}{24} \\]`}</MathJax>
-                где <MathJax inline dynamic>{`\\( M_2 = \\max_{[a, b]} |f''(x)| \\)`}</MathJax>. Суммарная погрешность:
-                <MathJax>{`\\[ R \\leq \\frac{M_2 (b - a) h^2}{24} = O(h^2) \\]`}</MathJax>
-                Погрешность метода средних прямоугольников имеет порядок \( h^2 \), что делает его более точным, чем методы
-                левых и правых прямоугольников, благодаря центральному положению точки аппроксимации.
-              </Paragraph>
-            </Typography>
-          </Panel>
-        </Collapse>
+  <Panel header="Теория" key="1">
+    <Typography style={{ textAlign: 'left', padding: '0 20px' }}>
+      <Paragraph>
+        Метод средних прямоугольников — это способ численного интегрирования:
+        <MathJax>{`\\[ I = \\int_{a}^{b} f(x) \\, dx \\]`}</MathJax>
+        где <MathJax inline dynamic>{`\\( f(x) \\)`}</MathJax> — непрерывная функция на <MathJax inline dynamic>{`\\( [a, b] \\)`}</MathJax>.
+      </Paragraph>
+      <Paragraph>
+        Интервал <MathJax inline dynamic>{`\\( [a, b] \\)`}</MathJax> делится на <MathJax inline dynamic>{`\\( n \\)`}</MathJax> равных частей с шагом <MathJax inline dynamic>{`\\( h = \\frac{b - a}{n} \\)`}</MathJax>. Значения функции берутся в серединах подынтервалов:
+        <MathJax inline dynamic>{`\\( x_k = a_k + \\frac{h}{2} \\)`}</MathJax>.
+      </Paragraph>
+      <Paragraph>
+        Формула:
+        <MathJax>{`\\[ I \\approx h \\sum_{k=0}^{n-1} f\\left(a_k + \\frac{h}{2}\\right) \\]`}</MathJax>
+        Это сумма площадей прямоугольников, высота которых определяется значением функции в середине каждого подынтервала.
+      </Paragraph>
+      <Paragraph>
+        Погрешность:
+        <MathJax>{`\\[ \\left| \\int_{a_k}^{a_{k+1}} f(x) \\, dx - h f\\left(\\frac{a_k + a_{k+1}}{2}\\right) \\right| \\leq \\frac{M_2 h^3}{24} \\]`}</MathJax>
+        где <MathJax inline dynamic>{`\\( M_2 = \\max_{[a, b]} |f''(x)| \\)`}</MathJax>. Суммарная оценка:
+        <MathJax>{`\\[ R \\leq \\frac{M_2 (b - a) h^2}{24} = O(h^2) \\]`}</MathJax>
+      </Paragraph>
+    </Typography>
+  </Panel>
+</Collapse>
+
 
         <div className="integration-container">
           <div className="inputs-block">

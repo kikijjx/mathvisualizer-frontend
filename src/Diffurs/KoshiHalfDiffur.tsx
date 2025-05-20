@@ -4,25 +4,24 @@ import DiffurInputs from './DiffurInputs';
 import DiffurChart from './DiffurChart';
 import DiffurTable from './DiffurTable';
 import { MathJax } from 'better-react-mathjax';
-import { replaceMathFunctions, eulerMethod, koshiMethod, koshiHalfMethod, rungeKutta4Method, calculateExactSolution, isIndependentOfY } from '../mathUtils';
+import { replaceMathFunctions, eulerMethod, koshiHalfMethod, rungeKutta4Method, calculateExactSolution, isIndependentOfY } from '../mathUtils';
 
 const { Paragraph } = Typography;
 const { Panel } = Collapse;
 
-const EulerDiffur: React.FC = () => {
+const KoshiHalfDiffur: React.FC = () => {
   const [latex, setLatex] = useState<string>('sin(x)');
   const [x0, setX0] = useState<number>(0);
   const [y0, setY0] = useState<number>(1);
   const [b, setB] = useState<number>(10);
   const [n, setN] = useState<number>(20);
-  const [eulerData, setEulerData] = useState<{ x: number; y: number }[]>([]);
-  const [koshiData, setKoshiData] = useState<{ x: number; y: number }[]>([]);
   const [koshiHalfData, setKoshiHalfData] = useState<{ x: number; y: number }[]>([]);
+  const [eulerData, setEulerData] = useState<{ x: number; y: number }[]>([]);
   const [rungeKuttaData, setRungeKuttaData] = useState<{ x: number; y: number }[]>([]);
   const [exactData, setExactData] = useState<{ x: number; y: number }[]>([]);
 
   const solve = () => {
-    console.time('ODE Solve Time');
+    console.time('Koshi Half Method Time');
 
     if (b <= x0) {
       message.error('Ошибка: b должно быть больше x0');
@@ -42,18 +41,16 @@ const EulerDiffur: React.FC = () => {
         return result;
       };
 
-      // Compute results for all methods
-      const eulerResult = eulerMethod(func, x0, y0, b, h);
-      const koshiResult = koshiMethod(func, x0, y0, b, h);
+      // Вычисление результатов для всех методов
       const koshiHalfResult = koshiHalfMethod(func, x0, y0, b, h);
+      const eulerResult = eulerMethod(func, x0, y0, b, h);
       const rungeKuttaResult = rungeKutta4Method(func, x0, y0, b, h);
 
-      setEulerData(eulerResult);
-      setKoshiData(koshiResult);
       setKoshiHalfData(koshiHalfResult);
+      setEulerData(eulerResult);
       setRungeKuttaData(rungeKuttaResult);
 
-      // Compute exact solution if the equation is independent of y
+      // Вычисление точного решения, если уравнение не зависит от y
       if (isIndependentOfY(func, x0, y0)) {
         console.log('Уравнение не зависит от y, вычисляем точное решение.');
         const numPoints = 200;
@@ -73,13 +70,13 @@ const EulerDiffur: React.FC = () => {
     } catch (error) {
       console.error('Ошибка при вычислении:', error);
       message.error('Ошибка при решении уравнения. Проверьте введённую функцию.');
+      setKoshiHalfData([]);
       setEulerData([]);
-      setKoshiData([]);
       setRungeKuttaData([]);
       setExactData([]);
     }
 
-    console.timeEnd('ODE Solve Time');
+    console.timeEnd('Koshi Half Method Time');
   };
 
   return (
@@ -100,7 +97,7 @@ const EulerDiffur: React.FC = () => {
           .chart-block {
             flex: 2;
             min-width: 300px;
-            max-width: atesh800px;
+            max-width: 800px;
           }
           @media (max-width: 768px) {
             .integration-container {
@@ -113,7 +110,7 @@ const EulerDiffur: React.FC = () => {
         `}
       </style>
       <Card
-        title="Метод Эйлера"
+        title="Метод Эйлера-Коши на полуцелой сетке"
         style={{
           width: '100%',
           maxWidth: 1200,
@@ -126,24 +123,21 @@ const EulerDiffur: React.FC = () => {
           <Panel header="Теория" key="1">
             <Typography style={{ textAlign: 'left', padding: '0 20px' }}>
               <Paragraph>
-                Для дифференциального уравнения первого порядка:{' '}
+                Для дифференциального уравнения первого порядка:
                 <MathJax>{`\\[ \\frac{dy}{dx} = f(x, y) \\]`}</MathJax>
-                с начальными условиями{' '}
-                <MathJax inline dynamic>{`\\( y(x_0) = y_0 \\)`}</MathJax>, метод Эйлера аппроксимирует решение, используя разностную схему:{' '}
-                <MathJax>{`\\[ y_{n+1} = y_n + h \\cdot f(x_n, y_n) \\]`}</MathJax>
-                где <MathJax inline dynamic>{`\\( h \\)`}</MathJax> — шаг,{' '}
-                <MathJax inline dynamic>{`\\( x_{n+1} = x_n + h \\)`}</MathJax>.
+                с начальными условиями <MathJax inline dynamic>{`\\( y(x_0) = y_0 \\)`}</MathJax>, метод Эйлера-Коши на полуцелой сетке (метод средней точки) аппроксимирует решение, используя формулу:
+                <MathJax>{`\\[ y_{n+1} = y_n + h \\cdot f\\left(x_n + \\frac{h}{2}, y_n + \\frac{h}{2} \\cdot f(x_n, y_n)\\right) \\]`}</MathJax>
+                где <MathJax inline dynamic>{`\\( h \\)`}</MathJax> — шаг, <MathJax inline dynamic>{`\\( x_{n+1} = x_n + h \\)`}</MathJax>.
               </Paragraph>
               <Paragraph>
-                Если уравнение имеет вид{' '}
-                <MathJax inline dynamic>{`\\( y' = f(x) \\)`}</MathJax> (не зависит от{' '}
-                <MathJax inline dynamic>{`\\( y \\)`}</MathJax>), точное решение можно найти как:{' '}
+                Этот метод оценивает производную в середине интервала, что повышает точность до порядка <MathJax inline dynamic>{`\\( O(h^2) \\)`}</MathJax> по сравнению с простым методом Эйлера, имеющим погрешность <MathJax inline dynamic>{`\\( O(h) \\)`}</MathJax>.
+              </Paragraph>
+              <Paragraph>
+                Если уравнение имеет вид <MathJax inline dynamic>{`\\( y' = f(x) \\)`}</MathJax> (не зависит от <MathJax inline dynamic>{`\\( y \\)`}</MathJax>), точное решение можно найти как:
                 <MathJax>{`\\[ y(x) = y_0 + \\int_{x_0}^{x} f(t) \\, dt \\]`}</MathJax>
               </Paragraph>
               <Paragraph>
-                Метод Эйлера строит ломаную, соединяя точки{' '}
-                <MathJax inline dynamic>{`\\( (x_n, y_n) \\)`}</MathJax>. Чем меньше шаг{' '}
-                <MathJax inline dynamic>{`\\( h \\)`}</MathJax>, тем точнее аппроксимация.
+                Метод средней точки обеспечивает баланс между вычислительной сложностью и точностью, что делает его полезным для численного решения ОДУ.
               </Paragraph>
             </Typography>
           </Panel>
@@ -182,20 +176,21 @@ const EulerDiffur: React.FC = () => {
             </Button>
           </div>
           <div className="chart-block">
-            <DiffurChart eulerData={eulerData} exactData={exactData} methodLabel='Метод Эйлера'/>
+            <DiffurChart eulerData={koshiHalfData} exactData={exactData} methodLabel='Метод Эйлера-Коши (полуцелая сетка)'/>
           </div>
         </div>
 
-        {eulerData.length > 0 && (
+        {koshiHalfData.length > 0 && (
           <DiffurTable
             eulerData={eulerData}
-            koshiData={koshiData}
+            koshiData={koshiHalfData}
             koshiHalfData={koshiHalfData}
             rungeKuttaData={rungeKuttaData}
             exactData={exactData}
             step={(b - x0) / n}
             showExact={exactData.length > 0}
-            highlightedMethod="Эйлера"
+            highlightedMethod="Эйлера-Коши (полуцелая сетка)"
+
           />
         )}
       </Card>
@@ -203,4 +198,4 @@ const EulerDiffur: React.FC = () => {
   );
 };
 
-export default EulerDiffur;
+export default KoshiHalfDiffur;

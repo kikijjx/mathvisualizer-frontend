@@ -230,14 +230,18 @@ const [tableData, setTableData] = useState<
       </Paragraph>
       <Paragraph>
         Погрешность на одном двойном подынтервале:
-        <MathJax>{`\\[ \\left| \\int_{a_{2k-2}}^{a_{2k}} f(x) \\, dx - \\frac{h}{3} (f(a_{2k-2}) + 4 f(a_{2k-1}) + f(a_{2k})) \\right| \\leq \\frac{M_3 h^4}{96} \\]`}</MathJax>
-        где <MathJax inline dynamic>{`\\( M_3 = \\max_{[a, b]} |f'''(x)| \\)`}</MathJax>. Суммарная погрешность:
-        <MathJax>{`\\[ R_2 \\leq \\frac{M_3 h^3 (b - a)}{192} = O(h^3) \\]`}</MathJax>
-        Погрешность порядка <MathJax inline dynamic>{`\\( h^3 \\)`}</MathJax> делает метод Симпсона значительно точнее методов прямоугольников и трапеций, но требует чётного числа подынтервалов.
+        <MathJax>{`\\[ \\left| \\int_{a}^{a+2h} f(x) \\, dx - \\frac{h}{3} \\left( f(a) + 4 f(a+h) + f(a+2h) \\right) \\right| \\leq \\frac{h^5}{90} \\max_{x \\in [a, a+2h]} |f^{(4)}(x)| \\]`}</MathJax>
+        где <MathJax inline dynamic>{`\\( f^{(4)}(x) \\)`}</MathJax> — четвёртая производная функции.
+      </Paragraph>
+      <Paragraph>
+        Суммарная погрешность метода Симпсона на всём отрезке:
+        <MathJax>{`\\[ R \\leq \\frac{(b - a)}{180} h^4 \\max_{x \\in [a, b]} |f^{(4)}(x)| = O(h^4) \\]`}</MathJax>
+        Метод Симпсона обладает высокой точностью при достаточно гладкой функции и требует чётного числа подынтервалов.
       </Paragraph>
     </Typography>
   </Panel>
 </Collapse>
+
 
         <div className="integration-container">
           <div className="inputs-block">

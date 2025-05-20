@@ -53,7 +53,7 @@ const SubtaskModal: React.FC<SubtaskModalProps> = ({
   };
 
   return (
-    <Modal title="Добавить подзадачу" open={open} onOk={onOk} onCancel={onCancel}>
+    <Modal title="Добавить метод" open={open} onOk={onOk} onCancel={onCancel}>
       <Select
         placeholder="Выберите метод"
         style={{ width: '100%', marginBottom: '12px' }}

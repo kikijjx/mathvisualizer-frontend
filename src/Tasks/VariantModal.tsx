@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import { Button, Modal, Form, InputNumber, Checkbox, Slider, Typography, Divider, message, Input } from 'antd';
 import { MathJax } from 'better-react-mathjax';
@@ -9,7 +8,7 @@ import { Document, Packer, Paragraph, TextRun, Table, TableCell, TableRow, Width
 import { saveAs } from 'file-saver';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-
+import { parse, evaluate } from 'mathjs';
 
 const { Text } = Typography;
 
@@ -133,46 +132,447 @@ const VariantModal: React.FC<VariantModalProps> = ({
     return true;
   };
 
-  const checkLatexValidity = (expr: string, aMin: number, aMax: number, bMin: number, bMax: number): boolean => {
-    try {
-      const testValues = [
-        aMin, aMax, bMin, bMax,
-        (aMin + aMax) / 2,
-        (bMin + bMax) / 2,
-      ];
+const checkLatexValidity = (
+  expr: string,
+  a: number,
+  b: number
+): { valid: boolean; reason?: string } => {
+  try {
+    let jsExpr = expr
+      .replace(/\\sin/g, 'sin')
+      .replace(/\\cos/g, 'cos')
+      .replace(/\\tan/g, 'tan')
+      .replace(/\\ln/g, 'log')
+      .replace(/e\^{([^}]+)}/g, 'exp($1)')
+      .replace(/\\sqrt{([^}]+)}/g, 'sqrt($1)')
+      .replace(/\^{([^}]+)}/g, '^($1)')
+      .replace(/x/g, 'x')
+      .replace(/\s+/g, '');
 
-      for (const x of testValues) {
-        let evalExpr = expr
-          .replace(/\\sin/g, 'Math.sin')
-          .replace(/\\cos/g, 'Math.cos')
-          .replace(/\\tan/g, 'Math.tan')
-          .replace(/\\ln/g, 'Math.log')
-          .replace(/e\^{([^}]+)}/g, 'Math.exp($1)')
-          .replace(/x/g, x.toString())
-          .replace(/\^{([^}]+)}/g, '**($1)');
+    console.debug(`Преобразованное выражение: ${jsExpr}`);
 
-        if (evalExpr.includes('/')) {
-          const parts = evalExpr.split('/');
-          for (let i = 1; i < parts.length; i++) {
-            const denominator = eval(parts[i]);
-            if (Math.abs(denominator) < 1e-10) {
-              console.warn(`LaTeX-выражение "${expr}" невалидно: деление на ноль при x = ${x}`);
-              return false;
+    const node = parse(jsExpr);
+
+    const checkDomain = (n: any, interval: { min: number; max: number }): { valid: boolean; reason?: string } => {
+      if (!n || typeof n.type !== 'string') {
+        return { valid: false, reason: `Некорректный узел парсинга: ${JSON.stringify(n)}` };
+      }
+
+      if (n.type === 'FunctionNode') {
+        const func = n.name;
+        const arg = n.args[0];
+
+        if (!arg) {
+          return { valid: false, reason: `Аргумент функции ${func} не определён` };
+        }
+
+        if (func === 'log') {
+          const testPoints = [interval.min, interval.max, (interval.min + interval.max) / 2];
+          for (const x of testPoints) {
+            const argValue = evaluate(arg.toString(), { x });
+            if (!isFinite(argValue) || argValue <= 0) {
+              return { valid: false, reason: `log не определено: g(x) = ${argValue} при x = ${x}` };
+            }
+          }
+          return checkDomain(arg, interval);
+        } else if (func === 'sqrt') {
+          const testPoints = [interval.min, interval.max, (interval.min + interval.max) / 2];
+          for (const x of testPoints) {
+            const argValue = evaluate(arg.toString(), { x });
+            if (!isFinite(argValue) || argValue < 0) {
+              return { valid: false, reason: `sqrt не определено: g(x) = ${argValue} при x = ${x}` };
+            }
+          }
+          return checkDomain(arg, interval);
+        } else if (func === 'tan') {
+          const testPoints = [interval.min, interval.max, (interval.min + interval.max) / 2];
+          for (const x of testPoints) {
+            const argValue = evaluate(arg.toString(), { x });
+            if (!isFinite(argValue) || Math.abs(argValue % Math.PI - Math.PI / 2) < 1e-10) {
+              return { valid: false, reason: `tan не определено: g(x) ≈ π/2 + kπ при x = ${x}` };
+            }
+          }
+          return checkDomain(arg, interval);
+        } else if (func === 'exp') {
+          const testPoints = [interval.min, interval.max, (interval.min + interval.max) / 2];
+          for (const x of testPoints) {
+            const argValue = evaluate(arg.toString(), { x });
+            if (!isFinite(argValue)) {
+              return { valid: false, reason: `exp не определено: аргумент ${argValue} при x = ${x}` };
+            }
+          }
+          return checkDomain(arg, interval);
+        } else if (['sin', 'cos'].includes(func)) {
+          return checkDomain(arg, interval);
+        } else {
+          return { valid: false, reason: `Неподдерживаемая функция: ${func}` };
+        }
+      } else if (n.type === 'OperatorNode') {
+        const op = n.op;
+        const args = n.args || [];
+
+        if (args.length < 2) {
+          return { valid: false, reason: `Недостаточно аргументов для оператора ${op}` };
+        }
+
+        const left = args[0];
+        const right = args[1];
+
+        if (op === '/') {
+          const testPoints = [interval.min, interval.max, (interval.min + interval.max) / 2];
+          for (const x of testPoints) {
+            const denomValue = evaluate(right.toString(), { x });
+            if (!isFinite(denomValue) || Math.abs(denomValue) < 1e-10) {
+              return { valid: false, reason: `Деление на ноль или неопределённое значение в ${expr} при x = ${x}` };
             }
           }
         }
+        const leftResult = checkDomain(left, interval);
+        if (!leftResult.valid) return leftResult;
+        const rightResult = checkDomain(right, interval);
+        if (!rightResult.valid) return rightResult;
+        return { valid: true };
+      } else if (n.type === 'SymbolNode' || n.type === 'ConstantNode') {
+        return { valid: true };
+      } else if (n.type === 'ParenthesisNode') {
+        return checkDomain(n.content, interval);
+      } else if (n.type === 'PowerNode') {
+        const base = n.args[0];
+        const exponent = n.args[1];
+        const baseResult = checkDomain(base, interval);
+        if (!baseResult.valid) return baseResult;
+        const exponentResult = checkDomain(exponent, interval);
+        if (!exponentResult.valid) return exponentResult;
 
-        const result = eval(evalExpr);
-        if (!isFinite(result)) {
-          console.warn(`LaTeX-выражение "${expr}" невалидно: бесконечное или неопределенное значение при x = ${x}`);
-          return false;
+        const testPoints = [interval.min, interval.max, (interval.min + interval.max) / 2];
+        for (const x of testPoints) {
+          const baseValue = evaluate(base.toString(), { x });
+          const exponentValue = evaluate(exponent.toString(), { x });
+          if (baseValue < 0 && !Number.isInteger(exponentValue)) {
+            return { valid: false, reason: `Отрицательное основание с нецелочисленной степенью при x = ${x}` };
+          }
+        }
+        return { valid: true };
+      } else {
+        return { valid: false, reason: `Неподдерживаемый тип узла: ${n.type}` };
+      }
+    };
+
+    const domainResult = checkDomain(node, { min: a, max: b });
+    if (!domainResult.valid) {
+      return domainResult;
+    }
+
+    const testPoints = [a, b, (a + b) / 2];
+    for (const x of testPoints) {
+      const result = evaluate(jsExpr, { x });
+      if (!isFinite(result)) {
+        return {
+          valid: false,
+          reason: `Выражение возвращает бесконечное или неопределённое значение при x = ${x}`,
+        };
+      }
+    }
+
+    return { valid: true };
+  } catch (error) {
+    return { valid: false, reason: `Ошибка проверки выражения: ${error}` };
+  }
+};
+
+const generateComplexLatex = (
+  complexity: number,
+  options: LatexOptions,
+  a: number,
+  b: number
+): string => {
+  const basicFunctions = ['\\sin', '\\cos', '\\tan', '\\sqrt', '\\ln', 'e', 'x'];
+  const operations = ['+', '-', '*', '/'];
+  const maxCoefficient = 5;
+  const maxPower = 3;
+
+  const getRandomNumber = (min: number, max: number) =>
+    Math.floor(Math.random() * (max - min + 1)) + min;
+
+  const getCoefficient = () => {
+    if (!options.numbers) return '';
+    const coeff = getRandomNumber(-maxCoefficient, maxCoefficient);
+    if (coeff === 0) return '';
+    if (coeff === 1) return '';
+    if (coeff === -1) return '-';
+    return coeff.toString();
+  };
+
+  const getPower = () => (options.numbers ? getRandomNumber(1, maxPower) : '');
+
+  const isTrivialPair = (left: string, right: string, operation: string): boolean => {
+    if (left === right) return true;
+    const leftBase = left.replace(/^-?\d*\\?/, '').replace(/\(.*\)/, '').replace(/\^{[^}]+}/, '');
+    const rightBase = right.replace(/^-?\d*\\?/, '').replace(/\(.*\)/, '').replace(/\^{[^}]+}/, '');
+    return leftBase === rightBase && (operation === '+' || operation === '-' || operation === '*');
+  };
+
+  const calculateXCount = (expr: string): number => {
+    return (expr.match(/x/g) || []).length;
+  };
+
+  const analyzeExpression = (expr: string): { xCount: number; isTrivial: boolean } => {
+    const xCount = calculateXCount(expr);
+    const parts = expr.split(/\s*[\+\-\*\/]\s*/).filter(Boolean);
+    const uniqueBases = new Set(
+      parts.map((part) => part.replace(/^-?\d*\\?/, '').replace(/\(.*\)/, '').replace(/\^{[^}]+}/, ''))
+    );
+    const isTrivial = uniqueBases.size < parts.length / 2;
+    return { xCount, isTrivial };
+  };
+
+  const normalizeExpression = (expr: string): string => {
+    return expr
+      .replace(/\\sqrt{([^}]+)}/g, '\\sqrt{$1}')
+      .replace(/\^{([^}]+)}/g, '^{$1}')
+      .replace(/\(\(/g, '(')
+      .replace(/\)\)/g, ')')
+      .replace(/\)(\s*)\(/g, ')*(')
+      .replace(/(\d|\w)(\()/g, '$1*(')
+      .replace(/\)\s*([+\-*/])/g, ')$1')
+      .replace(/([+\-*/])\s*\(/g, '$1(')
+      .replace(/(\w|\))\s+(\w|\()/g, '$1*$2')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
+  const generateBase = (): string => {
+    const func = basicFunctions[Math.floor(Math.random() * basicFunctions.length)];
+    const coefficient = getCoefficient();
+    let expr = '';
+
+    if (func === 'x') {
+      const power = getPower();
+      expr = `${coefficient}x${power ? `^{${power}}` : ''}`;
+    } else if (func === 'e') {
+      expr = `${coefficient}e^{x}`;
+    } else if (func === '\\sqrt' || func === '\\ln') {
+      expr = `${coefficient}${func}{(x^{2} + 1)}`;
+    } else {
+      expr = `${coefficient}${func}{(x)}`;
+    }
+
+    return expr || 'x';
+  };
+
+  const generate = (targetComplexity: number): string => {
+    if (targetComplexity <= 1) {
+      return generateBase();
+    }
+
+    const availableOptions = [];
+    if (options.recursive) availableOptions.push('recursive');
+    if (options.linear) availableOptions.push('linear');
+    if (!availableOptions.length) availableOptions.push('linear');
+
+    const choice = availableOptions[Math.floor(Math.random() * availableOptions.length)];
+
+    if (choice === 'recursive') {
+      const outerFunc = basicFunctions[Math.floor(Math.random() * basicFunctions.length)];
+      const coefficient = getCoefficient();
+      const innerExpr = generate(targetComplexity - 1);
+
+      if (outerFunc === '\\sqrt') {
+        return `${coefficient}\\sqrt{(${innerExpr})^{2} + 1}`;
+      } else if (outerFunc === '\\ln') {
+        return `${coefficient}\\ln((${innerExpr})^{2} + 1)`;
+      } else if (outerFunc === 'x') {
+        const power = getPower();
+        return `${coefficient}x^{${power || innerExpr}}`;
+      } else if (outerFunc === 'e') {
+        return `${coefficient}e^{${innerExpr.replace(/e\^{[^}]+}/g, 'x')}}`;
+      }
+      return `${coefficient}${outerFunc}{((${innerExpr}))}`;
+    } else {
+      const parts: string[] = [];
+      let remainingComplexity = targetComplexity;
+
+      while (remainingComplexity > 0) {
+        const partComplexity = Math.min(remainingComplexity, Math.floor(Math.random() * remainingComplexity) + 1);
+        parts.push(generate(partComplexity));
+        remainingComplexity -= partComplexity;
+      }
+
+      let expr = parts[0];
+      for (let i = 1; i < parts.length; i++) {
+        const operation = operations[Math.floor(Math.random() * operations.length)];
+        let right = parts[i];
+
+        let attempts = 0;
+        const maxAttempts = 10;
+        while (isTrivialPair(expr, right, operation) && attempts < maxAttempts) {
+          right = generate(calculateXCount(parts[i]));
+          attempts++;
+        }
+
+        if (operation === '/') {
+          right = `((${right})^{2} + 1)`;
+        }
+
+        if (operation === '+' && right.startsWith('-')) {
+          expr = `${expr} - ${right.substring(1)}`;
+        } else if (operation === '-' && right.startsWith('-')) {
+          expr = `${expr} + ${right.substring(1)}`;
+        } else {
+          expr = `${expr} ${operation} ${right}`;
         }
       }
-      return true;
-    } catch (error) {
-      console.warn(`Ошибка проверки LaTeX-выражения "${expr}":`, error);
-      return false;
+
+      return expr;
     }
+  };
+
+  let result = normalizeExpression(generate(complexity));
+  let attempts = 0;
+  const maxAttempts = 50;
+  let analysis = analyzeExpression(result);
+
+  while (
+    (analysis.xCount <= complexity ||
+      analysis.isTrivial ||
+      !checkLatexValidity(result, a, b).valid) &&
+    attempts < maxAttempts
+  ) {
+    const prevResult = result;
+    result = normalizeExpression(generate(complexity));
+    analysis = analyzeExpression(result);
+    const validityCheck = checkLatexValidity(result, a, b);
+
+    console.log('Сгенерировано LaTeX-выражение:', {
+      expression: result,
+      complexity: complexity,
+      xCount: analysis.xCount,
+      isTrivial: analysis.isTrivial,
+      options: {
+        recursive: options.recursive,
+        linear: options.linear,
+        numbers: options.numbers,
+      },
+      bounds: `[${a}, ${b}]`,
+      valid: validityCheck.valid,
+      reason: validityCheck.valid ? 'Выражение определено в заданных границах' : validityCheck.reason,
+      attempt: attempts + 1,
+    });
+
+    if (!validityCheck.valid) {
+      console.log(`Отклонено выражение "${prevResult}" из-за: ${validityCheck.reason}`);
+    }
+
+    attempts++;
+  }
+
+  if (attempts >= maxAttempts) {
+    console.warn(
+      `Не удалось сгенерировать нетривиальное выражение с x <= ${complexity}, определённое в [${a}, ${b}]. Последнее: ${result}`
+    );
+  } else {
+    console.log('Принято LaTeX-выражение:', {
+      expression: result,
+      complexity: complexity,
+      xCount: analysis.xCount,
+      isTrivial: analysis.isTrivial,
+      options: {
+        recursive: options.recursive,
+        linear: options.linear,
+        numbers: options.numbers,
+      },
+      bounds: `[${a}, ${b}]`,
+      valid: true,
+      attempt: attempts,
+    });
+  }
+
+  return result;
+};
+
+  const generateParamValue = (
+    param: { type: string },
+    paramKey: string,
+    a: number | null,
+    b: number | null
+  ): any => {
+    const settings = paramSettings[paramKey] || {};
+    const options = latexOptions[paramKey] || { recursive: true, linear: true, numbers: true };
+
+    switch (param.type) {
+      case 'number':
+        const numberValue =
+          Math.floor(Math.random() * ((settings.max || 10) - (settings.min || 1) + 1)) + (settings.min || 1);
+        console.log('Сгенерировано числовое значение:', {
+          param: paramKey,
+          value: numberValue,
+          bounds: `[${settings.min || 1}, ${settings.max || 10}]`,
+        });
+        return numberValue;
+      case 'latex':
+        if (a === null || b === null) {
+          console.warn(`Не определены границы a или b для генерации LaTeX-выражения для ${paramKey}`);
+          return generateComplexLatex(settings.complexity || 1, options, 1, 10);
+        }
+        const latexValue = generateComplexLatex(settings.complexity || 1, options, a, b);
+        return latexValue;
+      default:
+        console.warn(`Неизвестный тип параметра для ${paramKey}: ${param.type}`);
+        return '';
+    }
+  };
+
+  const generateTaskVariant = (task: Task, variantIndex: number): Task => {
+    const newTask = { ...task, id: task.id * 1000 + variantIndex };
+
+    if (task.params) {
+      newTask.params = { ...task.params };
+      const aKey = themeParams.find((p) => p.name === 'a') ? `param_${themeParams.find((p) => p.name === 'a')!.id}` : null;
+      const bKey = themeParams.find((p) => p.name === 'b') ? `param_${themeParams.find((p) => p.name === 'b')!.id}` : null;
+
+      let aValue: number | null = null;
+      let bValue: number | null = null;
+
+      if (aKey && selectedParams[aKey]) {
+        const settings = paramSettings[aKey] || { min: 1, max: 10 };
+        aValue = Math.floor(Math.random() * ((settings.max || 10) - (settings.min || 1) + 1)) + (settings.min || 1);
+        newTask.params['a'] = aValue;
+      }
+
+      if (bKey && selectedParams[bKey]) {
+        const settings = paramSettings[bKey] || { min: 1, max: 10 };
+        let bMin = settings.min || 1;
+        if (aValue !== null && aValue >= bMin) {
+          bMin = aValue + 1;
+        }
+        bValue = Math.floor(Math.random() * ((settings.max || 10) - bMin + 1)) + bMin;
+        newTask.params['b'] = bValue;
+      }
+
+      themeParams.forEach((param) => {
+        if (param.name !== 'a' && param.name !== 'b' && selectedParams[`param_${param.id}`]) {
+          newTask.params[param.name] = generateParamValue(param, `param_${param.id}`, aValue, bValue);
+        }
+      });
+    }
+
+    newTask.subtasks = task.subtasks.map((subtask) => {
+      const method = methods.find((m) => m.id === subtask.method_id);
+      if (!method) return subtask;
+
+      const newSubtask = { ...subtask, params: { ...subtask.params } };
+      if (method.params) {
+        method.params.forEach((param) => {
+          if (selectedParams[`param_${param.id}`]) {
+            newSubtask.params[param.name] = generateParamValue(param, `param_${param.id}`, aValue, bValue);
+          }
+        });
+      }
+
+      return newSubtask;
+    });
+
+    return newTask;
   };
 
   const generateVariants = () => {
@@ -200,28 +600,39 @@ const VariantModal: React.FC<VariantModalProps> = ({
     const maxAttempts = numVariants * 10;
     let attempts = 0;
 
-    const aKey = themeParams.find((p) => p.name === 'a') ? `param_${themeParams.find((p) => p.name === 'a')!.id}` : null;
-    const bKey = themeParams.find((p) => p.name === 'b') ? `param_${themeParams.find((p) => p.name === 'b')!.id}` : null;
-    const aSettings = aKey && paramSettings[aKey] ? paramSettings[aKey] : { min: 1, max: 10 };
-    const bSettings = bKey && paramSettings[bKey] ? paramSettings[bKey] : { min: 1, max: 10 };
-
-    variants.forEach((variant) => {
+    variants.forEach((variant, index) => {
+      const variantParams: Record<string, any> = {};
       if (variant.params) {
         Object.entries(variant.params).forEach(([key, value]) => {
           const param = themeParams.find((p) => p.name === key);
           if (param?.type === 'latex' && typeof value === 'string') {
             latexExpressions.add(value);
           }
+          variantParams[key] = value;
         });
       }
-      variant.subtasks.forEach((subtask) => {
+      const subtaskParams: Record<string, any>[] = variant.subtasks.map((subtask) => {
+        const params: Record<string, any> = {};
         if (subtask.params) {
-          Object.values(subtask.params).forEach((value) => {
+          Object.entries(subtask.params).forEach(([key, value]) => {
             if (typeof value === 'string' && value.startsWith('\\')) {
               latexExpressions.add(value);
             }
+            params[key] = value;
           });
         }
+        return params;
+      });
+
+      console.log(`Вариант ${index + 1}:`, {
+        id: variant.id,
+        description: variant.description,
+        params: variantParams,
+        subtasks: subtaskParams.map((params, subtaskIndex) => ({
+          subtaskIndex: subtaskIndex + 1,
+          methodId: variant.subtasks[subtaskIndex].method_id,
+          params,
+        })),
       });
     });
 
@@ -229,230 +640,55 @@ const VariantModal: React.FC<VariantModalProps> = ({
       .filter((p) => p.type === 'latex' && selectedParams[`param_${p.id}`])
       .map((p) => `param_${p.id}`);
 
+    const aKey = themeParams.find((p) => p.name === 'a') ? `param_${themeParams.find((p) => p.name === 'a')!.id}` : null;
+    const bKey = themeParams.find((p) => p.name === 'b') ? `param_${themeParams.find((p) => p.name === 'b')!.id}` : null;
+    const aSettings = aKey && paramSettings[aKey] ? paramSettings[aKey] : { min: 1, max: 10 };
+    const bSettings = bKey && paramSettings[bKey] ? paramSettings[bKey] : { min: 1, max: 10 };
+
     while (latexExpressions.size < numVariants && attempts < maxAttempts && latexParamKeys.length > 0) {
       const paramKey = latexParamKeys[Math.floor(Math.random() * latexParamKeys.length)];
-      let newExpr = generateComplexLatex(paramSettings[paramKey]?.complexity || 1, latexOptions[paramKey]);
-      if (checkLatexValidity(newExpr, aSettings.min || 1, aSettings.max || 10, bSettings.min || 1, bSettings.max || 10)) {
+      const options = latexOptions[paramKey] || { recursive: true, linear: true, numbers: true };
+
+      const aValue = Math.floor(Math.random() * ((aSettings.max || 10) - (aSettings.min || 1) + 1)) + (aSettings.min || 1);
+      let bMin = bSettings.min || 1;
+      if (aValue >= bMin) {
+        bMin = aValue + 1;
+      }
+      const bValue = Math.floor(Math.random() * ((bSettings.max || 10) - bMin + 1)) + bMin;
+
+      const newExpr = generateComplexLatex(
+        paramSettings[paramKey]?.complexity || 1,
+        options,
+        aValue,
+        bValue
+      );
+      const validityCheck = checkLatexValidity(newExpr, aValue, bValue);
+      if (validityCheck.valid) {
         latexExpressions.add(newExpr);
+        console.log(`Добавлено уникальное LaTeX-выражение для параметра ${paramKey}:`, {
+          expression: newExpr,
+          valid: true,
+          bounds: `[${aValue}, ${bValue}]`,
+          attempt: attempts + 1,
+        });
       } else {
-        console.log(`Пропущено выражение "${newExpr}" из-за невалидности в границах a=[${aSettings.min},${aSettings.max}], b=[${bSettings.min},${bSettings.max}]`);
+        console.log(`Пропущено выражение для параметра ${paramKey}:`, {
+          expression: newExpr,
+          valid: false,
+          reason: validityCheck.reason,
+          bounds: `[${aValue}, ${bValue}]`,
+          attempt: attempts + 1,
+        });
       }
       attempts++;
     }
 
     const latexArray = Array.from(latexExpressions);
-    console.log('Сгенерированные уникальные LaTeX-выражения:', latexArray);
+    console.log('Итоговые уникальные LaTeX-выражения:', latexArray);
 
     if (latexExpressions.size < numVariants) {
       console.warn(`Не удалось сгенерировать ${numVariants} уникальных выражений, получено только ${latexExpressions.size}`);
     }
-  };
-
-  const generateTaskVariant = (task: Task, variantIndex: number): Task => {
-    const newTask = { ...task, id: task.id * 1000 + variantIndex };
-
-    if (task.params) {
-      newTask.params = { ...task.params };
-      const aKey = themeParams.find((p) => p.name === 'a') ? `param_${themeParams.find((p) => p.name === 'a')!.id}` : null;
-      const bKey = themeParams.find((p) => p.name === 'b') ? `param_${themeParams.find((p) => p.name === 'b')!.id}` : null;
-
-      let aValue: number | null = null;
-      if (aKey && selectedParams[aKey]) {
-        const settings = paramSettings[aKey] || { min: 1, max: 10 };
-        aValue = Math.floor(Math.random() * ((settings.max || 10) - (settings.min || 1) + 1)) + (settings.min || 1);
-        newTask.params['a'] = aValue;
-      }
-
-      if (bKey && selectedParams[bKey]) {
-        const settings = paramSettings[bKey] || { min: 1, max: 10 };
-        let bMin = settings.min || 1;
-        if (aValue !== null && aValue >= bMin) {
-          bMin = aValue + 1;
-        }
-        const bValue = Math.floor(Math.random() * ((settings.max || 10) - bMin + 1)) + bMin;
-        newTask.params['b'] = bValue;
-      }
-
-      themeParams.forEach((param) => {
-        if (param.name !== 'a' && param.name !== 'b' && selectedParams[`param_${param.id}`]) {
-          newTask.params[param.name] = generateParamValue(param, `param_${param.id}`);
-        }
-      });
-    }
-
-    newTask.subtasks = task.subtasks.map((subtask) => {
-      const method = methods.find((m) => m.id === subtask.method_id);
-      if (!method) return subtask;
-
-      const newSubtask = { ...subtask, params: { ...subtask.params } };
-      if (method.params) {
-        method.params.forEach((param) => {
-          if (selectedParams[`param_${param.id}`]) {
-            newSubtask.params[param.name] = generateParamValue(param, `param_${param.id}`);
-          }
-        });
-      }
-
-      return newSubtask;
-    });
-
-    return newTask;
-  };
-
-  const generateParamValue = (param: { type: string }, paramKey: string): any => {
-    const settings = paramSettings[paramKey] || {};
-    const options = latexOptions[paramKey] || { recursive: true, linear: true, numbers: true };
-
-    switch (param.type) {
-      case 'number':
-        return Math.floor(Math.random() * ((settings.max || 10) - (settings.min || 1) + 1)) + (settings.min || 1);
-      case 'latex':
-        return generateComplexLatex(settings.complexity || 1, options);
-      default:
-        return '';
-    }
-  };
-
-  const generateComplexLatex = (complexity: number, options: LatexOptions): string => {
-    const basicFunctions = ['\\sin', '\\cos', '\\tan', '\\sqrt', '\\ln', 'e', 'x'];
-    const operations = ['+', '-', '*', '/'];
-    const maxCoefficient = 5;
-    const maxPower = 3;
-
-    const getRandomNumber = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
-
-    const getCoefficient = () => {
-      if (!options.numbers) return '';
-      const coeff = getRandomNumber(-maxCoefficient, maxCoefficient);
-      if (coeff === 0) return '';
-      if (coeff === 1) return '';
-      if (coeff === -1) return '-';
-      return coeff.toString();
-    };
-
-    const getPower = () => (options.numbers ? getRandomNumber(2, maxPower) : '');
-
-    const isTrivialPair = (left: string, right: string, operation: string): boolean => {
-      if (left === right) return true;
-      const leftBase = left.replace(/^-?\d*\\?/, '').replace(/\(.*\)/, '').replace(/\^{[^}]+}/, '');
-      const rightBase = right.replace(/^-?\d*\\?/, '').replace(/\(.*\)/, '').replace(/\^{[^}]+}/, '');
-      return leftBase === rightBase && (operation === '+' || operation === '-' || operation === '*');
-    };
-
-    const calculateXCount = (expr: string): number => {
-      return (expr.match(/x/g) || []).length;
-    };
-
-    const analyzeExpression = (expr: string): { xCount: number; isTrivial: boolean } => {
-      const xCount = calculateXCount(expr);
-      const parts = expr.split(/\s*[\+\-\*\/]\s*/).filter(Boolean);
-      const bases = parts.map(part => part.replace(/^-?\d*\\?/, '').replace(/\(.*\)/, '').replace(/\^{[^}]+}/, ''));
-      const uniqueBases = new Set(bases);
-
-      const isTrivial = uniqueBases.size < parts.length / 2;
-      return { xCount, isTrivial };
-    };
-
-    const generateBase = (): string => {
-      const func = basicFunctions[Math.floor(Math.random() * basicFunctions.length)];
-      const coefficient = getCoefficient();
-      let expr = '';
-
-      if (func === 'x') {
-        const power = getPower();
-        expr = `${coefficient}x${power ? `^{${power}}` : ''}`;
-      } else if (func === 'e') {
-        expr = `${coefficient}e^{x}`;
-      } else {
-        expr = `${coefficient}${func}(x)`;
-      }
-
-      return expr || 'x';
-    };
-
-    const generate = (targetComplexity: number): string => {
-      if (targetComplexity <= 1) {
-        return generateBase();
-      }
-
-      const availableOptions = [];
-      if (options.recursive) availableOptions.push('recursive');
-      if (options.linear) availableOptions.push('linear');
-      if (!availableOptions.length) availableOptions.push('linear');
-
-      const choice = availableOptions[Math.floor(Math.random() * availableOptions.length)];
-
-      if (choice === 'recursive') {
-        const outerFunc = basicFunctions[Math.floor(Math.random() * basicFunctions.length)];
-        const coefficient = getCoefficient();
-        const innerExpr = generate(targetComplexity - 1);
-
-        if (outerFunc === '\\sqrt') {
-          return `${coefficient}\\sqrt{(${innerExpr})^{2}}`;
-        } else if (outerFunc === '\\ln') {
-          return `${coefficient}\\ln((${innerExpr})^{2} + 1)`;
-        } else if (outerFunc === 'x') {
-          const power = getPower();
-          return `${coefficient}x^{${power || innerExpr}}`;
-        } else if (outerFunc === 'e') {
-          return `${coefficient}e^{${innerExpr}}`;
-        }
-        return `${coefficient}${outerFunc}(${innerExpr})`;
-      } else {
-        const parts: string[] = [];
-        let remainingComplexity = targetComplexity;
-
-        while (remainingComplexity > 0) {
-          const partComplexity = Math.min(remainingComplexity, Math.floor(Math.random() * remainingComplexity) + 1);
-          parts.push(generate(partComplexity));
-          remainingComplexity -= partComplexity;
-        }
-
-        let expr = parts[0];
-        for (let i = 1; i < parts.length; i++) {
-          const operation = operations[Math.floor(Math.random() * operations.length)];
-          let right = parts[i];
-
-          let attempts = 0;
-          const maxAttempts = 10;
-          while (isTrivialPair(expr, right, operation) && attempts < maxAttempts) {
-            right = generate(calculateXCount(parts[i]));
-            attempts++;
-          }
-
-          if (operation === '/') {
-            right = `((${right})^{2} + 1)`;
-          }
-
-          if (operation === '+' && right.startsWith('-')) {
-            expr = `${expr} - ${right.substring(1)}`;
-          } else if (operation === '-' && right.startsWith('-')) {
-            expr = `${expr} + ${right.substring(1)}`;
-          } else {
-            expr = `${expr} ${operation} ${right}`;
-          }
-        }
-
-        return expr;
-      }
-    };
-
-    let result = generate(complexity);
-    let attempts = 0;
-    const maxAttempts = 50;
-    let analysis = analyzeExpression(result);
-
-    while ((analysis.xCount !== complexity || analysis.isTrivial) && attempts < maxAttempts) {
-      result = generate(complexity);
-      analysis = analyzeExpression(result);
-      attempts++;
-    }
-
-    if (attempts >= maxAttempts) {
-      console.warn(`Не удалось сгенерировать нетривиальное выражение с точным количеством x = ${complexity}, возвращаем последнее: ${result}`);
-    }
-
-    return result;
   };
 
   const downloadPDF = () => {

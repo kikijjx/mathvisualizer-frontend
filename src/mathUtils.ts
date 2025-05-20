@@ -235,6 +235,30 @@ export const koshiMethod = (
   const result = [{ x: x0, y: y0 }];
   let x = x0;
   let y = y0;
+
+  while (x < xEnd - h / 2) {
+    const k1 = f(x, y); // значение производной в начале шага
+    const y_predict = y + h * k1; // предсказание методом Эйлера
+    const k2 = f(x + h, y_predict); // значение производной в конце шага
+    y += (h / 2) * (k1 + k2); // уточнённое значение
+    x += h;
+    result.push({ x, y });
+  }
+
+  return result;
+};
+
+
+export const koshiHalfMethod = (
+  f: (x: number, y: number) => number,
+  x0: number,
+  y0: number,
+  xEnd: number,
+  h: number
+): { x: number; y: number }[] => {
+  const result = [{ x: x0, y: y0 }];
+  let x = x0;
+  let y = y0;
   while (x < xEnd - h / 2) {
     const k1 = f(x, y);
     y += h * f(x + h / 2, y + (h / 2) * k1);

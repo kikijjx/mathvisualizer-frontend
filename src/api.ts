@@ -1,6 +1,6 @@
 import axios, { AxiosError } from 'axios';
 
-const API_URL = 'http://localhost:8000/api'; // Замените на ваш URL FastAPI
+const API_URL = 'http://localhost:8000/api';
 
 export interface Theme {
   id: number;

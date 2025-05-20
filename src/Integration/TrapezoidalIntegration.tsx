@@ -196,28 +196,30 @@ const TrapezoidalIntegration: React.FC = () => {
           borderRadius: '8px',
         }}
       >
-        <Collapse defaultActiveKey={[]} style={{ marginBottom: '20px' }}>
+<Collapse defaultActiveKey={[]} style={{ marginBottom: '20px' }}>
   <Panel header="Теория" key="1">
     <Typography style={{ textAlign: 'left', padding: '0 20px' }}>
       <Paragraph>
-        Метод трапеций предназначен для приближённого вычисления определённого интеграла:
+        Метод трапеций применяется для приближённого вычисления определённого интеграла:
         <MathJax>{`\\[ I = \\int_{a}^{b} f(x) \\, dx \\]`}</MathJax>
-        где <MathJax inline dynamic>{`\\( f(x) \\)`}</MathJax> — подынтегральная функция, непрерывная на отрезке <MathJax inline dynamic>{`\\( [a, b] \\)`}</MathJax>. Интеграл представляет площадь криволинейной трапеции под графиком функции.
+        где <MathJax inline dynamic>{`\\( f(x) \\)`}</MathJax> — непрерывная на отрезке <MathJax inline dynamic>{`\\( [a, b] \\)`}</MathJax> функция. Интеграл приближённо равен сумме площадей трапеций, построенных под графиком функции.
       </Paragraph>
       <Paragraph>
-        Интервал <MathJax inline dynamic>{`\\( [a, b] \\)`}</MathJax> разбивается на <MathJax inline dynamic>{`\\( n \\)`}</MathJax> равных подынтервалов с шагом <MathJax inline dynamic>{`\\( h = \\frac{b - a}{n} \\)`}</MathJax>. Узлы: <MathJax inline dynamic>{`\\( a_k = a + k h \\)`}</MathJax>, где <MathJax inline dynamic>{`\\( k = 0, 1, \\dots, n \\)`}</MathJax>. На каждом подынтервале <MathJax inline dynamic>{`\\( [a_{k-1}, a_k] \\)`}</MathJax> функция аппроксимируется полиномом Лагранжа первой степени, проходящим через точки <MathJax inline dynamic>{`\\( (a_{k-1}, f(a_{k-1})) \\)`}</MathJax> и <MathJax inline dynamic>{`\\( (a_k, f(a_k)) \\)`}</MathJax>. Геометрически это заменяет криволинейную трапецию геометрической трапецией с основаниями <MathJax inline dynamic>{`\\( f(a_{k-1}) \\)`}</MathJax> и <MathJax inline dynamic>{`\\( f(a_k) \\)`}</MathJax> и высотой <MathJax inline dynamic>{`\\( h \\)`}</MathJax>.
+        Разобьём отрезок <MathJax inline dynamic>{`\\( [a, b] \\)`}</MathJax> на <MathJax inline dynamic>{`\\( n \\)`}</MathJax> равных частей с шагом <MathJax inline dynamic>{`\\( h = \\frac{b - a}{n} \\)`}</MathJax>. Узлы разбиения: <MathJax inline dynamic>{`\\( a_k = a + k h \\)`}</MathJax>, где <MathJax inline dynamic>{`\\( k = 0, 1, \\dots, n \\)`}</MathJax>. На каждом подынтервале <MathJax inline dynamic>{`\\( [a_{k-1}, a_k] \\)`}</MathJax> функция аппроксимируется отрезком прямой (полиномом первой степени), соединяющим точки <MathJax inline dynamic>{`\\( (a_{k-1}, f(a_{k-1})) \\)`}</MathJax> и <MathJax inline dynamic>{`\\( (a_k, f(a_k)) \\)`}</MathJax>.
       </Paragraph>
       <Paragraph>
-        Формула трапеций:
+        Итоговая формула метода трапеций:
         <MathJax>{`\\[ I \\approx \\frac{h}{2} \\left[ f(a_0) + 2 \\sum_{k=1}^{n-1} f(a_k) + f(a_n) \\right] \\]`}</MathJax>
-        Это сумма площадей трапеций, аппроксимирующих криволинейную трапецию под графиком функции.
+        где сумма аппроксимирует площадь под графиком функции на всём отрезке.
       </Paragraph>
       <Paragraph>
-        Погрешность на одном подынтервале:
-        <MathJax>{`\\[ \\left| \\int_{a_{k-1}}^{a_k} f(x) \\, dx - \\frac{h}{2} (f(a_{k-1}) + f(a_k)) \\right| \\leq \\frac{M_2 h^3}{12} \\]`}</MathJax>
-        где <MathJax inline dynamic>{`\\( M_2 = \\max_{[a, b]} |f''(x)| \\)`}</MathJax>. Суммарная погрешность:
-        <MathJax>{`\\[ R_1 \\leq \\frac{M_2 h^2 (b - a)}{12} = O(h^2) \\]`}</MathJax>
-        Квадратичная зависимость погрешности от <MathJax inline dynamic>{`\\( h \\)`}</MathJax> делает метод трапеций более точным, чем методы прямоугольников, за счёт учёта линейного изменения функции.
+        Погрешность на одном подынтервале оценивается как:
+        <MathJax>{`\\[ \\left| \\int_{a_{k-1}}^{a_k} f(x) \\, dx - \\frac{h}{2} (f(a_{k-1}) + f(a_k)) \\right| \\leq \\frac{h^3}{12} \\max_{x \\in [a_{k-1}, a_k]} |f''(x)| \\]`}</MathJax>
+      </Paragraph>
+      <Paragraph>
+        Суммарная погрешность на всём отрезке:
+        <MathJax>{`\\[ |R| \\leq \\frac{(b - a) h^2}{12} \\max_{x \\in [a, b]} |f''(x)| = O(h^2) \\]`}</MathJax>
+        Погрешность убывает квадратично при уменьшении шага, что делает метод трапеций более точным по сравнению с методом прямоугольников.
       </Paragraph>
     </Typography>
   </Panel>

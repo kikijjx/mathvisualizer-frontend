@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Card, Button, Typography, Collapse } from 'antd';
+import { Card, Button, Typography, Collapse, message } from 'antd';
 import DiffurInputs from './DiffurInputs';
 import DiffurChart from './DiffurChart';
+import DiffurTable from './DiffurTable';
 import { MathJax } from 'better-react-mathjax';
-import { replaceMathFunctions, rungeKutta4Method, calculateExactSolution, isIndependentOfY } from '../mathUtils';
+import { replaceMathFunctions, eulerMethod, koshiMethod, koshiHalfMethod, rungeKutta4Method, calculateExactSolution, isIndependentOfY } from '../mathUtils';
 
 const { Paragraph } = Typography;
 const { Panel } = Collapse;
@@ -14,44 +15,69 @@ const RungeDiffur: React.FC = () => {
   const [y0, setY0] = useState<number>(1);
   const [b, setB] = useState<number>(10);
   const [n, setN] = useState<number>(20);
-  const [rungeData, setRungeData] = useState<{ x: number; y: number }[]>([]);
+  const [rungeKuttaData, setRungeKuttaData] = useState<{ x: number; y: number }[]>([]);
+  const [eulerData, setEulerData] = useState<{ x: number; y: number }[]>([]);
+  const [koshiData, setKoshiData] = useState<{ x: number; y: number }[]>([]);
+  const [koshiHalfData, setKoshiHalfData] = useState<{ x: number; y: number }[]>([]);
   const [exactData, setExactData] = useState<{ x: number; y: number }[]>([]);
 
   const solve = () => {
     console.time('Runge-Kutta 4 Method Time');
 
     if (b <= x0) {
-      console.error('Ошибка: b должно быть больше x0');
+      message.error('Ошибка: b должно быть больше x0');
       return;
     }
     if (n <= 0) {
-      console.error('Ошибка: n должно быть положительным');
+      message.error('Ошибка: n должно быть положительным');
       return;
     }
 
-    const h = (b - x0) / n;
-    const processedLatex = replaceMathFunctions(latex);
-    const func = (x: number, y: number) => eval(processedLatex.replace(/x/g, `(${x})`).replace(/y/g, `(${y})`));
+    try {
+      const h = (b - x0) / n;
+      const processedLatex = replaceMathFunctions(latex);
+      const func = (x: number, y: number) => {
+        const result = eval(processedLatex.replace(/x/g, `(${x})`).replace(/y/g, `(${y})`));
+        if (isNaN(result) || !isFinite(result)) throw new Error('Недопустимое значение функции');
+        return result;
+      };
 
-    const rungeResult = rungeKutta4Method(func, x0, y0, b, h);
-    setRungeData(rungeResult);
+      // Вычисление результатов для всех методов
+      const rungeKuttaResult = rungeKutta4Method(func, x0, y0, b, h);
+      const eulerResult = eulerMethod(func, x0, y0, b, h);
+      const koshiResult = koshiMethod(func, x0, y0, b, h);            
+      const koshiHalfResult = koshiHalfMethod(func, x0, y0, b, h);
 
-    if (isIndependentOfY(func, x0, y0)) {
-      console.log('Уравнение не зависит от y, вычисляем точное решение.');
-      const numPoints = 200;
-      const exactResult = [];
-      for (let i = 0; i <= numPoints; i++) {
-        const x = x0 + (i / numPoints) * (b - x0);
-        const y = calculateExactSolution(func, x0, y0, x);
-        exactResult.push({ x, y });
+      setRungeKuttaData(rungeKuttaResult);
+      setEulerData(eulerResult);
+      setKoshiData(koshiResult);
+      setKoshiHalfData(koshiHalfResult);
+      // Вычисление точного решения, если уравнение не зависит от y
+      if (isIndependentOfY(func, x0, y0)) {
+        console.log('Уравнение не зависит от y, вычисляем точное решение.');
+        const numPoints = 200;
+        const exactResult = [];
+        for (let i = 0; i <= numPoints; i++) {
+          const x = x0 + (i / numPoints) * (b - x0);
+          const y = calculateExactSolution(func, x0, y0, x);
+          exactResult.push({ x, y });
+        }
+        setExactData(exactResult);
+      } else {
+        console.log('Точное решение неизвестно.');
+        setExactData([]);
       }
-      setExactData(exactResult);
-    } else {
-      console.log('Точное решение неизвестно.');
+
+      console.log(`Число разбиений: ${n}, Шаг h: ${h}`);
+    } catch (error) {
+      console.error('Ошибка при вычислении:', error);
+      message.error('Ошибка при решении уравнения. Проверьте введённую функцию.');
+      setRungeKuttaData([]);
+      setEulerData([]);
+      setKoshiData([]);
       setExactData([]);
     }
 
-    console.log(`Число разбиений: ${n}, Шаг h: ${h}`);
     console.timeEnd('Runge-Kutta 4 Method Time');
   };
 
@@ -86,7 +112,7 @@ const RungeDiffur: React.FC = () => {
         `}
       </style>
       <Card
-        title="Метод Рунге-Кутты 4-го порядка"
+        title="Метод Рунге-Кутта 4-го порядка"
         style={{
           width: '100%',
           maxWidth: 1200,
@@ -101,7 +127,7 @@ const RungeDiffur: React.FC = () => {
               <Paragraph>
                 Для дифференциального уравнения первого порядка:
                 <MathJax>{`\\[ \\frac{dy}{dx} = f(x, y) \\]`}</MathJax>
-                с начальными условиями <MathJax inline dynamic>{`\\( y(x_0) = y_0 \\)`}</MathJax>, метод Рунге-Кутты 4-го порядка аппроксимирует решение, используя формулу:
+                с начальными условиями <MathJax inline dynamic>{`\\( y(x_0) = y_0 \\)`}</MathJax>, метод Рунге-Кутта 4-го порядка аппроксимирует решение, используя формулу:
                 <MathJax>{`\\[ k_1 = f(x_n, y_n), \\]`}</MathJax>
                 <MathJax>{`\\[ k_2 = f\\left(x_n + \\frac{h}{2}, y_n + \\frac{h}{2} \\cdot k_1\\right), \\]`}</MathJax>
                 <MathJax>{`\\[ k_3 = f\\left(x_n + \\frac{h}{2}, y_n + \\frac{h}{2} \\cdot k_2\\right), \\]`}</MathJax>
@@ -153,9 +179,23 @@ const RungeDiffur: React.FC = () => {
             </Button>
           </div>
           <div className="chart-block">
-            <DiffurChart eulerData={rungeData} exactData={exactData} />
+            <DiffurChart eulerData={rungeKuttaData} exactData={exactData} methodLabel='Метод Рунге-Кутта'/>
           </div>
         </div>
+
+        {rungeKuttaData.length > 0 && (
+          <DiffurTable
+            eulerData={eulerData}
+            koshiData={koshiData}
+            koshiHalfData={koshiHalfData}
+            rungeKuttaData={rungeKuttaData}
+            exactData={exactData}
+            step={(b - x0) / n}
+            showExact={exactData.length > 0}
+            highlightedMethod="Рунге-Кутта"
+
+          />
+        )}
       </Card>
     </>
   );

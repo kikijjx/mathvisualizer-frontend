@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Menu, theme as antdTheme } from 'antd';
+import { Layout, Menu, theme as antdTheme, Button } from 'antd';
 import { MathJaxContext } from 'better-react-mathjax';
-import { BookOutlined, FunctionOutlined, SettingOutlined } from '@ant-design/icons';
+import { BookOutlined, FunctionOutlined, SettingOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import TrapezoidalIntegration from './Integration/TrapezoidalIntegration';
 import LeftRectanglesIntegration from './Integration/LeftRectanglesIntegration';
 import RightRectanglesIntegration from './Integration/RightRectanglesIntegration';
@@ -9,7 +9,9 @@ import MidpointRectanglesIntegration from './Integration/MidpointRectanglesInteg
 import SimpsonIntegration from './Integration/SimpsonIntegration';
 import EulerDiffur from './Diffurs/EulerDiffur';
 import KoshiDiffur from './Diffurs/KoshiDiffur';
+import KoshiHalfDiffur from './Diffurs/KoshiHalfDiffur';
 import RungeDiffur from './Diffurs/RungeDiffur';
+
 import Tasks from './Tasks/Tasks';
 import AdminPanel from './AdminPanel';
 import { getThemes, getTasks, Theme, Task, Method } from './api';
@@ -22,6 +24,8 @@ const App: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [activeTab, setActiveTab] = useState<string>('methods');
   const [activeMethodTab, setActiveMethodTab] = useState<string>('trapezoidal');
+  const [collapsed, setCollapsed] = useState<boolean>(window.innerWidth < 768);
+  const [isMobile, setIsMobile] = useState<boolean>(window.innerWidth < 768);
 
   const { token } = antdTheme.useToken();
 
@@ -37,6 +41,14 @@ const App: React.FC = () => {
       }
     };
     fetchData();
+
+    const handleResize = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      setCollapsed(mobile ? true : false); // Collapse on mobile, expand on desktop
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   const refreshData = async () => {
@@ -61,6 +73,7 @@ const App: React.FC = () => {
   const diffurMethods = [
     { key: 'euler', label: 'Метод Эйлера', component: <EulerDiffur /> },
     { key: 'koshi', label: 'Метод Эйлера-Коши', component: <KoshiDiffur /> },
+    { key: 'koshihalf', label: 'Метод Эйлера-Коши на полуцелой сетке', component: <KoshiHalfDiffur /> },
     { key: 'runge', label: 'Метод Рунге-Кутта', component: <RungeDiffur /> },
   ];
 
@@ -110,14 +123,20 @@ const App: React.FC = () => {
   const handleTabChange = (key: string) => {
     setActiveTab(key);
     if (key === 'methods') {
-      setActiveMethodTab('trapezoidal'); // По умолчанию открываем "Метод трапеций"
+      setActiveMethodTab('trapezoidal');
     } else {
       setActiveMethodTab('');
+    }
+    if (isMobile) {
+      setCollapsed(true); // Auto-collapse on mobile after selection
     }
   };
 
   const handleMethodChange = (key: string) => {
     setActiveMethodTab(key);
+    if (isMobile) {
+      setCollapsed(true); // Auto-collapse on mobile after selection
+    }
   };
 
   const renderContent = () => {
@@ -152,10 +171,52 @@ const App: React.FC = () => {
     })),
   }));
 
+  const toggleCollapsed = () => {
+    setCollapsed(!collapsed);
+  };
+
   return (
     <MathJaxContext>
       <Layout style={{ minHeight: '100vh' }}>
-        <Sider width={300} style={{ background: token.colorBgContainer }}>
+        
+        <Sider
+          collapsible
+          collapsed={collapsed}
+          onCollapse={setCollapsed}
+          trigger={null}
+          width={300}
+          collapsedWidth={isMobile ? 0 : 80} // Fully hide on mobile, icon-only on desktop
+          style={{
+            background: token.colorBgContainer,
+            position: isMobile ? 'fixed' : 'relative',
+            height: isMobile ? '100vh' : 'auto',
+            zIndex: 1000,
+            width: isMobile && !collapsed ? '100vw' : undefined,
+            transition: 'all 0.2s',
+            borderRight: 1
+          }}
+        >
+          <Header
+            style={{
+              background: token.colorBgContainer,
+              padding: '0 16px',
+              display: 'flex',
+              alignItems: 'left',
+              height: 64,
+              position: 'sticky',
+              top: 0,
+              zIndex: 1000,
+              
+            }}
+          >
+            <Button
+              type="secondary"
+              onClick={toggleCollapsed}
+              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              style={{ marginLeft: 7, minWidth: 20 }}
+            >
+            </Button>
+          </Header>
           <Menu
             theme="light"
             mode="inline"
@@ -174,7 +235,8 @@ const App: React.FC = () => {
           )}
         </Sider>
         <Layout>
-          <Content style={{ margin: '24px 16px', padding: 24, background: token.colorBgContainer }}>
+          
+          <Content style={{ margin: '0 1px', padding: 24, background: token.colorBgContainer }}>
             {renderContent()}
           </Content>
         </Layout>
